@@ -31,8 +31,7 @@
 
 ## Data in the accompanying paper
 
-The paper's data availability statement describes the Columbus and Buenos Aires
-data:
+The paper's data availability statement describes the Columbus data:
 - Columbus weekly area-level counts are public in the
   [research repository](https://github.com/CodeMateo15/GNN-Influenza-Boston).
 - Columbus Public Health's visit-level extracts are available from them on

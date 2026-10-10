@@ -17,5 +17,9 @@ examples/data/chicago_cache/
 site/
 .cache/
 
+~:.pypirc
+~/.pypirc
+
+
 # Live 2026-27 track: refreshed agency data and archived forecasts (scripts/live_forecast.py)
 live/

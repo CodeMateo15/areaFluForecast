@@ -1,8 +1,6 @@
 # areaFluForecast
 
-**Documentation: https://areafluforecast.readthedocs.io** (available once the repository is
-public and imported on Read the Docs; build it locally with
-`pip install -r docs/requirements.txt && mkdocs serve`).
+**Documentation: https://areafluforecast.readthedocs.io** · **PyPI: https://pypi.org/project/areaFluForecast/**
 
 Neighborhood-scale influenza forecasts, 1 to 4 weeks ahead, for public health
 departments. You bring weekly flu rates for your areas (neighborhoods, ZIP-code
@@ -23,14 +21,15 @@ The package tells you, for each model and horizon, whether it did.
 
 > **What the evidence says.** In Boston the graph model's error was 18–28% below
 > persistence on seasons it never saw. It tied a carefully tuned LSTM at 1 week
-> and led it on average at 2–4 weeks. In Buenos Aires it did no better than
-> persistence. Your city may be either, and the backtest is how you find out.
+> and led it on average at 2–4 weeks. In Columbus, with only one unseen season,
+> its error was 12–23% below persistence on average, but that lead was not
+> statistically clear. Your city may be either, and the backtest is how you
+> find out.
 
 ## Install
 
 ```bash
-pip install areaFluForecast            # once published; until then:
-pip install git+https://github.com/CodeMateo15/areaFluForecast
+pip install areaFluForecast
 pip install "areaFluForecast[plot]"    # adds plotting
 ```
 
@@ -51,7 +50,7 @@ fc.summary()
 
 Or from the shell: `areaflu backtest --sample boston --seasons 1 --quick`.
 
-**Worked examples:** [`examples/`](examples/) has five notebooks, saved with
+**Worked examples:** [`examples/`](https://github.com/CodeMateo15/areaFluForecast/tree/HEAD/examples) has five notebooks, saved with
 their outputs:
 - a Boston quickstart
 - bringing your own files
@@ -196,8 +195,8 @@ forecasts are identical, down to the last bit for training.
   the portal's required disclaimer.
 - **Nothing else is bundled.** The package contains no data from any other
   health department.
-- **Paper data.** The Columbus and Buenos Aires data used in the accompanying
-  paper are described in its data availability statement. Columbus weekly
+- **Paper data.** The Columbus data used in the accompanying paper are
+  described in its data availability statement. Columbus weekly
   area-level counts are public in the
   [research repository](https://github.com/CodeMateo15/GNN-Influenza-Boston).
   Columbus Public Health's visit-level extracts are available from them on

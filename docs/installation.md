@@ -1,7 +1,13 @@
 # Installation
 
 ```bash
-pip install areaFluForecast                 # once published on PyPI; until then:
+pip install areaFluForecast
+```
+
+The package is on [PyPI](https://pypi.org/project/areaFluForecast/). To get the
+latest unreleased changes instead:
+
+```bash
 pip install git+https://github.com/CodeMateo15/areaFluForecast
 ```
 

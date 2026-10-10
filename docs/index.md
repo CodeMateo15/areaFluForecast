@@ -35,7 +35,9 @@ fc.to_csv("forecast.csv")
       it on average at 2–4 weeks.
     - **Chicago:** on public ZIP-level data, all three models clearly beat
       persistence ([example 5](examples/05_real_city_chicago.ipynb)).
-    - **Buenos Aires:** nothing beat persistence.
+    - **Columbus:** in its one unseen season the graph model's error was 12–23%
+      below persistence on average, but with a single season that lead was not
+      statistically clear.
     - **Everywhere:** the forecasts run about as far behind the epidemic curve as
       persistence does ([why](limits.md#the-forecasts-run-late)).
 

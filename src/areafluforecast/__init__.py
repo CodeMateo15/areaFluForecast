@@ -20,7 +20,7 @@ from .configs import PRESETS, ColaGNNConfig, GNNConfig, LSTMConfig, resolve
 from .datasets import load_city, load_sample, save_city
 from .forecast import ForecastResult, TrustWarning, forecast
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.1"
 
 __all__ = ["City", "DataError", "backtest", "forecast", "load_sample", "load_city", "save_city", "BacktestResult",
            "ForecastResult", "TrustWarning", "GNNConfig", "LSTMConfig", "ColaGNNConfig",
