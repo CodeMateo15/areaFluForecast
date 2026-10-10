@@ -1,0 +1,87 @@
+site_name: areaFluForecast
+site_description: Neighborhood-scale influenza forecasts for public health departments, checked against persistence on your own data.
+site_author: Mateo Biggs
+repo_url: https://github.com/CodeMateo15/areaFluForecast
+repo_name: CodeMateo15/areaFluForecast
+edit_uri: edit/main/docs/
+copyright: MIT License
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle: {icon: material/brightness-7, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle: {icon: material/brightness-4, name: Switch to light mode}
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Preparing your data: your-data.md
+      - Backtest and forecast: workflow.md
+      - Reading the results: reading-results.md
+      - Short history? Start from another city: transfer.md
+  - Examples:
+      - Overview: examples/index.md
+      - 1. Boston quickstart: examples/01_quickstart_boston.ipynb
+      - 2. Your own data: examples/02_your_own_data.ipynb
+      - 3. Short history and transfer: examples/03_short_history_transfer.ipynb
+      - 4. Reading the results: examples/04_reading_the_results.ipynb
+      - 5. A real city (Chicago): examples/05_real_city_chicago.ipynb
+  - Background:
+      - Limits to know: limits.md
+      - Reproducing the paper: reproducibility.md
+      - Data and credits: data-and-credits.md
+  - API reference:
+      - City and data: api/city.md
+      - Backtest and forecast: api/workflow.md
+      - Model settings: api/configs.md
+      - Scores and timing: api/diagnostics.md
+      - Maps, weather, checkpoints: api/utilities.md
+
+plugins:
+  - search
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
+      ignore_h1_titles: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            filters: ["!^_"]
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+
+markdown_extensions:
+  - admonition
+  - md_in_html
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+exclude_docs: |
+  examples/data/

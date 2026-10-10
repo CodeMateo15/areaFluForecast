@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "areaFluForecast"
+version = "0.1.0.dev0"
+description = "Neighborhood-scale influenza forecasts for public health departments: a graph neural network, a tuned LSTM and Cola-GNN, each checked against persistence on your own data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Mateo Biggs", email = "biggs.m@northeastern.edu" }]
+keywords = ["influenza", "forecasting", "graph neural network", "public health", "epidemiology", "FluSight"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Healthcare Industry",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+    "torch>=2.1",
+    "torch-geometric>=2.4",
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+geo = ["shapely>=2.0"]
+dev = ["pytest>=7", "matplotlib>=3.7", "shapely>=2.0"]
+docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26", "mkdocs-jupyter>=0.25"]
+
+[project.scripts]
+areaflu = "areafluforecast.cli:main"
+
+[project.urls]
+Source = "https://github.com/CodeMateo15/areaFluForecast"
+Documentation = "https://areafluforecast.readthedocs.io"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+areafluforecast = ["sample_data/*/*.csv", "sample_data/*/*.json", "sample_data/*/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: trains small models end to end (still under a few minutes on CPU)",
+    "network: needs internet access (Open-Meteo, TIGERweb)",
+    "research: needs the GNN-Influenza-Boston research repo (set AREAFLU_RESEARCH_REPO)",
+]

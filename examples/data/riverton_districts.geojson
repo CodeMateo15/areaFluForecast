@@ -1,0 +1,501 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Old Town",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.3,
+       40.1
+      ],
+      [
+       -82.28,
+       40.1
+      ],
+      [
+       -82.28,
+       40.12
+      ],
+      [
+       -82.3,
+       40.12
+      ],
+      [
+       -82.3,
+       40.1
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Harbor",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.28,
+       40.1
+      ],
+      [
+       -82.26,
+       40.1
+      ],
+      [
+       -82.26,
+       40.12
+      ],
+      [
+       -82.28,
+       40.12
+      ],
+      [
+       -82.28,
+       40.1
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Millbrook",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.26,
+       40.1
+      ],
+      [
+       -82.24,
+       40.1
+      ],
+      [
+       -82.24,
+       40.12
+      ],
+      [
+       -82.26,
+       40.12
+      ],
+      [
+       -82.26,
+       40.1
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Eastgate",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.24,
+       40.1
+      ],
+      [
+       -82.22,
+       40.1
+      ],
+      [
+       -82.22,
+       40.12
+      ],
+      [
+       -82.24,
+       40.12
+      ],
+      [
+       -82.24,
+       40.1
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Westfield",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.3,
+       40.12
+      ],
+      [
+       -82.28,
+       40.12
+      ],
+      [
+       -82.28,
+       40.14
+      ],
+      [
+       -82.3,
+       40.14
+      ],
+      [
+       -82.3,
+       40.12
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Central",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.28,
+       40.12
+      ],
+      [
+       -82.26,
+       40.12
+      ],
+      [
+       -82.26,
+       40.14
+      ],
+      [
+       -82.28,
+       40.14
+      ],
+      [
+       -82.28,
+       40.12
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Parkview",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.26,
+       40.12
+      ],
+      [
+       -82.24,
+       40.12
+      ],
+      [
+       -82.24,
+       40.14
+      ],
+      [
+       -82.26,
+       40.14
+      ],
+      [
+       -82.26,
+       40.12
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Ironworks",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.24,
+       40.12
+      ],
+      [
+       -82.22,
+       40.12
+      ],
+      [
+       -82.22,
+       40.14
+      ],
+      [
+       -82.24,
+       40.14
+      ],
+      [
+       -82.24,
+       40.12
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Northside",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.3,
+       40.14
+      ],
+      [
+       -82.28,
+       40.14
+      ],
+      [
+       -82.28,
+       40.16
+      ],
+      [
+       -82.3,
+       40.16
+      ],
+      [
+       -82.3,
+       40.14
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Hillcrest",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.28,
+       40.14
+      ],
+      [
+       -82.26,
+       40.14
+      ],
+      [
+       -82.26,
+       40.16
+      ],
+      [
+       -82.28,
+       40.16
+      ],
+      [
+       -82.28,
+       40.14
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Riverside",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.26,
+       40.14
+      ],
+      [
+       -82.24,
+       40.14
+      ],
+      [
+       -82.24,
+       40.16
+      ],
+      [
+       -82.26,
+       40.16
+      ],
+      [
+       -82.26,
+       40.14
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Southpoint",
+    "kind": "district"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.24,
+       40.14
+      ],
+      [
+       -82.22,
+       40.14
+      ],
+      [
+       -82.22,
+       40.16
+      ],
+      [
+       -82.24,
+       40.16
+      ],
+      [
+       -82.24,
+       40.14
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "North Township",
+    "kind": "anchor"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.3,
+       40.16
+      ],
+      [
+       -82.28,
+       40.16
+      ],
+      [
+       -82.26,
+       40.16
+      ],
+      [
+       -82.24,
+       40.16
+      ],
+      [
+       -82.22,
+       40.16
+      ],
+      [
+       -82.22,
+       40.18
+      ],
+      [
+       -82.3,
+       40.18
+      ],
+      [
+       -82.3,
+       40.16
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district": "Lake Erin",
+    "kind": "anchor"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -82.22,
+       40.1
+      ],
+      [
+       -82.2,
+       40.1
+      ],
+      [
+       -82.2,
+       40.16
+      ],
+      [
+       -82.22,
+       40.16
+      ],
+      [
+       -82.22,
+       40.14
+      ],
+      [
+       -82.22,
+       40.12
+      ],
+      [
+       -82.22,
+       40.1
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

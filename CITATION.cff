@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "areaFluForecast: neighborhood-scale influenza forecasting for public health departments"
+type: software
+authors:
+  - family-names: Biggs
+    given-names: Mateo
+    email: biggs.m@northeastern.edu
+    affiliation: Northeastern University
+version: 0.1.0.dev0
+license: MIT
+repository-code: "https://github.com/CodeMateo15/areaFluForecast"
+# doi: add the Zenodo DOI after the first release
+keywords:
+  - influenza
+  - forecasting
+  - graph neural network
+  - public health

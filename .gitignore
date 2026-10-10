@@ -1,0 +1,21 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+.DS_Store
+areaflu_runs/
+gate_b/
+logs/
+parity_out/
+pretrained_out/
+*.pt
+.ipynb_checkpoints/
+examples/runs/
+examples/data/chicago_cache/
+site/
+.cache/
+
+# Live 2026-27 track: refreshed agency data and archived forecasts (scripts/live_forecast.py)
+live/

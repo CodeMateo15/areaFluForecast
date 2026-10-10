@@ -1,0 +1,20 @@
+{
+  "label": "Boston",
+  "flu_months": [
+    10,
+    11,
+    12,
+    1,
+    2,
+    3
+  ],
+  "anchors": [
+    "Camb/Somer",
+    "CharlesR",
+    "Chelsea+",
+    "Harbor",
+    "S.Suburbs",
+    "W.Suburbs",
+    "Brookline"
+  ]
+}

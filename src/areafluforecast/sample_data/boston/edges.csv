@@ -1,0 +1,45 @@
+a,b
+Allston/Brighton,Back Bay/Beacon Hill/Downtown/North End/West End
+Allston/Brighton,Fenway
+Allston/Brighton,Jamaica Plain
+Back Bay/Beacon Hill/Downtown/North End/West End,Charlestown
+Back Bay/Beacon Hill/Downtown/North End/West End,Fenway
+Back Bay/Beacon Hill/Downtown/North End/West End,South Boston
+Back Bay/Beacon Hill/Downtown/North End/West End,South End
+Charlestown,East Boston
+Dorchester,Mattapan
+Dorchester,Roxbury
+Dorchester,South Boston
+Dorchester,South End
+Fenway,Roxbury
+Fenway,South End
+Hyde Park,Mattapan
+Hyde Park,Roslindale
+Hyde Park,West Roxbury
+Jamaica Plain,Roslindale
+Jamaica Plain,Roxbury
+Mattapan,Roxbury
+Roslindale,West Roxbury
+Roxbury,South End
+South Boston,South End
+Allston/Brighton,Brookline
+Allston/Brighton,Camb/Somer
+Allston/Brighton,CharlesR
+Allston/Brighton,W.Suburbs
+Back Bay/Beacon Hill/Downtown/North End/West End,Camb/Somer
+Back Bay/Beacon Hill/Downtown/North End/West End,CharlesR
+Charlestown,Camb/Somer
+Charlestown,CharlesR
+Charlestown,Chelsea+
+Dorchester,Harbor
+Dorchester,S.Suburbs
+East Boston,Chelsea+
+East Boston,Harbor
+Fenway,Brookline
+Hyde Park,S.Suburbs
+Jamaica Plain,Brookline
+Mattapan,S.Suburbs
+Roslindale,W.Suburbs
+South Boston,Harbor
+West Roxbury,Brookline
+West Roxbury,W.Suburbs
