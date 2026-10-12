@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
+
+    from .forecast import ForecastResult
 
 
-def plot_forecast(result, *, model: str | None = None, areas=None, weeks_of_history: int = 26,
-                  path: str | Path | None = None):
+def plot_forecast(result: ForecastResult, *, model: str | None = None,
+                  areas: list[str] | None = None, weeks_of_history: int = 26,
+                  path: str | Path | None = None) -> Figure:
     try:
         import matplotlib.pyplot as plt
     except ImportError as exc:  # pragma: no cover

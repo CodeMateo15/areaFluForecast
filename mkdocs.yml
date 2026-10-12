@@ -43,12 +43,13 @@ nav:
       - Limits to know: limits.md
       - Reproducing the paper: reproducibility.md
       - Data and credits: data-and-credits.md
+      - Versioning and stability: versioning.md
   - API reference:
       - City and data: api/city.md
       - Backtest and forecast: api/workflow.md
       - Model settings: api/configs.md
       - Scores and timing: api/diagnostics.md
-      - Maps, weather, checkpoints: api/utilities.md
+      - Maps, weather, saved models: api/utilities.md
 
 plugins:
   - search

@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from scipy import stats
 
@@ -30,7 +31,8 @@ from .intervals import QUANTILE_COLUMNS, QUANTILE_LEVELS
 KEYS = ["target_date", "area", "horizon"]
 
 
-def interval_score(actual, lower, upper, alpha: float) -> np.ndarray:
+def interval_score(actual: npt.ArrayLike, lower: npt.ArrayLike, upper: npt.ArrayLike,
+                   alpha: float) -> np.ndarray:
     """Width of a central (1 - alpha) band plus 2/alpha per unit the truth fell outside."""
     actual = np.asarray(actual, float)
     lower = np.asarray(lower, float)
@@ -40,7 +42,8 @@ def interval_score(actual, lower, upper, alpha: float) -> np.ndarray:
     return (upper - lower) + (2.0 / alpha) * (below + above)
 
 
-def wis_from_quantiles(actual, quantiles, levels=QUANTILE_LEVELS) -> np.ndarray:
+def wis_from_quantiles(actual: npt.ArrayLike, quantiles: npt.ArrayLike,
+                       levels: npt.ArrayLike = QUANTILE_LEVELS) -> np.ndarray:
     """WIS per row from a full set of predictive quantiles (2 x mean pinball loss)."""
     actual = np.asarray(actual, float)[:, None]
     values = np.asarray(quantiles, float)
@@ -52,7 +55,8 @@ def wis_from_quantiles(actual, quantiles, levels=QUANTILE_LEVELS) -> np.ndarray:
     return 2.0 * pinball.mean(axis=1)
 
 
-def pit_values(actual, quantiles, levels=QUANTILE_LEVELS) -> np.ndarray:
+def pit_values(actual: npt.ArrayLike, quantiles: npt.ArrayLike,
+               levels: npt.ArrayLike = QUANTILE_LEVELS) -> np.ndarray:
     """Probability integral transform; uniform on [0, 1] for a calibrated forecast."""
     actual = np.asarray(actual, float)
     values = np.asarray(quantiles, float)
@@ -90,7 +94,7 @@ class DMResult:
     n_weeks: int
 
 
-def diebold_mariano(loss_a, loss_b, horizon: int) -> DMResult:
+def diebold_mariano(loss_a: npt.ArrayLike, loss_b: npt.ArrayLike, horizon: int) -> DMResult:
     """Two-sided test that two forecasts have equal expected weekly loss.
 
     Negative mean difference means A is better. Newey-West variance over h - 1
@@ -118,7 +122,7 @@ def diebold_mariano(loss_a, loss_b, horizon: int) -> DMResult:
     return DMResult(float(statistic), float(p_value), float(d.mean()), n)
 
 
-def holm(p_values) -> np.ndarray:
+def holm(p_values: npt.ArrayLike) -> np.ndarray:
     """Holm-Bonferroni adjusted p-values, same order as the input."""
     p = np.asarray(p_values, float)
     out = np.full_like(p, np.nan)

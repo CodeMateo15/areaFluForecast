@@ -57,7 +57,8 @@ def train(horizon: int, out: Path) -> None:
 def transfer(horizon: int, out: Path) -> None:
     city = city_from_research("columbus", with_static=False)
     start, end = city.season_window(TRANSFER_SEASON)
-    config, members, _ = af.load_checkpoint(checkpoint_path(out, horizon))
+    checkpoint = af.Checkpoint.load(checkpoint_path(out, horizon))
+    config, members = checkpoint.config, checkpoint.members
     arms = {
         "zero_shot_from_boston": dict(config=maybe_quick(config), init_members=members,
                                       zero_shot=True),

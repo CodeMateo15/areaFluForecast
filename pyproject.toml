@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "areaFluForecast"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Neighborhood-scale influenza forecasts for public health departments: a graph neural network, a tuned LSTM and Cola-GNN, each checked against persistence on your own data."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,15 @@ license-files = ["LICENSE"]
 authors = [{ name = "Mateo Biggs", email = "biggs.m@northeastern.edu" }]
 keywords = ["influenza", "forecasting", "graph neural network", "public health", "epidemiology", "FluSight"]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Healthcare Industry",
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
@@ -30,7 +38,7 @@ dependencies = [
 [project.optional-dependencies]
 plot = ["matplotlib>=3.7"]
 geo = ["shapely>=2.0"]
-dev = ["pytest>=7", "matplotlib>=3.7", "shapely>=2.0"]
+dev = ["pytest>=7", "matplotlib>=3.7", "shapely>=2.0", "ruff>=0.6", "build>=1.0", "twine>=5"]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26", "mkdocs-jupyter>=0.25"]
 
 [project.scripts]
@@ -39,12 +47,17 @@ areaflu = "areafluforecast.cli:main"
 [project.urls]
 Source = "https://github.com/CodeMateo15/areaFluForecast"
 Documentation = "https://areafluforecast.readthedocs.io"
+Changelog = "https://github.com/CodeMateo15/areaFluForecast/blob/main/CHANGELOG.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "areafluforecast.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-areafluforecast = ["sample_data/*/*.csv", "sample_data/*/*.json", "sample_data/*/*.md"]
+areafluforecast = ["sample_data/*/*.csv", "sample_data/*/*.json", "sample_data/*/*.md",
+                   "pretrained/*/*.pt", "pretrained/*/*.md", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -53,3 +66,20 @@ markers = [
     "network: needs internet access (Open-Meteo, TIGERweb)",
     "research: needs the GNN-Influenza-Boston research repo (set AREAFLU_RESEARCH_REPO)",
 ]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["docs", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E731", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+# Copied from the research code; kept line-for-line comparable with it.
+"src/areafluforecast/graphs.py" = ["E702"]
+"tests/test_research_parity.py" = ["E702"]
+# These embed notebook cells as strings.
+"scripts/build_example_notebooks.py" = ["E501"]
+"scripts/run_example_notebooks.py" = ["E501"]

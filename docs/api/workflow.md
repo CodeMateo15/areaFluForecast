@@ -6,8 +6,10 @@
 
 ::: areafluforecast.backtest.latest_backtest
 
+::: areafluforecast.backtest.combine
+
 ::: areafluforecast.forecast.forecast
 
 ::: areafluforecast.forecast.ForecastResult
 
-::: areafluforecast.forecast.TrustWarning
+::: areafluforecast.errors.TrustWarning

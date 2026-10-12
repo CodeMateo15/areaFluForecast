@@ -64,4 +64,11 @@ areaflu forecast --rates rates.csv --areas areas.geojson --id-col NAME --weather
 ```
 
 Or put the [`City.from_files`](api/city.md) arguments in a JSON file and pass
-`--city city.json`. Run `areaflu backtest --help` for every option.
+`--city city.json`; paths inside it are relative to the JSON file. Run
+`areaflu backtest --help` for every option.
+
+To start from the bundled Boston models, add `--pretrained boston --zero-shot`.
+For a saved model of your own, use `--init-from 1=h1.pt 2=h2.pt ...`.
+
+`areaflu` exits with code 0 on success, 2 for a wrong option or setting, and 3
+for a problem with your data or files. In each case the message says what to fix.

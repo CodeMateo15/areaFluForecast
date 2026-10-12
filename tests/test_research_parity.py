@@ -35,7 +35,6 @@ import torch  # noqa: E402
 
 from areafluforecast import configs, engine, graphs, samples, training  # noqa: E402
 from areafluforecast.models import SpatioTemporalGNN, blend_init  # noqa: E402
-from areafluforecast.windows import Window  # noqa: E402
 
 START, END = pd.Timestamp("2022-06-01"), pd.Timestamp("2023-05-31")
 EPOCHS = 3
@@ -49,8 +48,12 @@ def city():
 
 @pytest.fixture(scope="module")
 def research():
-    from influenza import config as rconfig, graphs as rgraphs, samples as rsamples
-    from influenza import training as rtraining, windows as rwindows, models as rmodels
+    from influenza import config as rconfig
+    from influenza import graphs as rgraphs
+    from influenza import models as rmodels
+    from influenza import samples as rsamples
+    from influenza import training as rtraining
+    from influenza import windows as rwindows
     from influenza.cities import get
     return SimpleNamespace(config=rconfig, graphs=rgraphs, samples=rsamples, training=rtraining,
                            windows=rwindows, models=rmodels, city=get("boston"))
@@ -159,8 +162,8 @@ def _rows(smp, positions):
 @pytest.mark.parametrize("kind", ["lstm", "colagnn"])
 def test_sequence_models_identical(city, research, kind):
     """Package engine vs the research runner's own functions, end to end, 1 seed."""
-    import run_lstm
     import run_colagnn
+    import run_lstm
 
     horizon = 2
     if kind == "lstm":

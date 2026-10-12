@@ -14,6 +14,7 @@ import pandas as pd
 
 from .city import City, scaled_static
 from .climatology import fit_climatology
+from .errors import DataError
 from .graphs import Graph
 from .weather import WEATHER_COLS, align_weather
 from .windows import Split, Window, normalization, train_end
@@ -61,12 +62,12 @@ def build_dataset(city: City, features: FeatureSpec, rates: pd.DataFrame | None 
     weather = {}
     if features.use_weather:
         if city.weather is None:
-            raise ValueError(f"{city.label} has no weather; call city.fetch_weather() or turn "
+            raise DataError(f"{city.label} has no weather; call city.fetch_weather() or turn "
                              "weather off in the model config.")
         weather = align_weather(city.weather, rates.index, city.areas)
     static, cols = (scaled_static(city) if features.use_static else (None, []))
     if features.use_static and static is None:
-        raise ValueError(f"{city.label} has no static characteristics; pass static= or turn "
+        raise DataError(f"{city.label} has no static characteristics; pass static= or turn "
                          "use_static off.")
     return Dataset(week_index=rates.index, rates=rates, flu_features=flu_features,
                    flu_imputed=flu_imputed, weather=weather, static=static,
@@ -106,7 +107,7 @@ class Samples:
     def n_static_feat(self) -> int:
         return self.n_feat - self.lookback * self.temporal_channels
 
-    def subset(self, positions: list[int]) -> "Samples":
+    def subset(self, positions: list[int]) -> Samples:
         lookup = {p: r for r, p in enumerate(self.positions)}
         rows = [lookup[p] for p in positions]
         return Samples(X=self.X[rows], g=self.g[rows], y=self.y[rows],

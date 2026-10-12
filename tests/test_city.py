@@ -1,10 +1,8 @@
-import warnings
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from areafluforecast import City, DataError, rates_from_counts, read_rates_csv
+from areafluforecast import City, DataError, DataWarning, rates_from_counts, read_rates_csv
 
 
 def test_basic_city(rates, line_edges):
@@ -57,7 +55,7 @@ def test_unknown_edge_names_and_anchors(rates, line_edges):
 
 
 def test_isolated_area_warns(rates):
-    with pytest.warns(UserWarning, match="border no other area"):
+    with pytest.warns(DataWarning, match="border no other area"):
         City(name="t", rates=rates, edges=[("a", "b"), ("b", "c")])
 
 

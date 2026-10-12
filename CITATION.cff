@@ -7,7 +7,7 @@ authors:
     given-names: Mateo
     email: biggs.m@northeastern.edu
     affiliation: Northeastern University
-version: 0.2.0
+version: 1.0.0rc1
 license: MIT
 repository-code: "https://github.com/CodeMateo15/areaFluForecast"
 # doi: add the Zenodo DOI after the first release

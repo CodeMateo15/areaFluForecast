@@ -123,7 +123,7 @@ def timing_table(predictions: pd.DataFrame, max_lead: int = MAX_LEAD) -> pd.Data
             .reset_index())
 
 
-def describe(row) -> str:
+def describe(row: pd.Series) -> str:
     """One plain-language line for the report."""
     late = row["weeks_late"]
     h = int(row["horizon"])

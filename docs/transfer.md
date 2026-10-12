@@ -14,9 +14,12 @@ Boston, was worse at 2 and 4 weeks.
 
 ## Backtest it first
 
+The package ships with models trained on Boston, one per horizon:
+
 ```python
+weights = af.pretrained("boston")
 bt = af.backtest(my_city, models=["gnn_st_noadapt"], seasons=[2025],
-                 init_from="boston_gnn_st_noadapt_h1.pt", zero_shot=True, horizons=(1,))
+                 init_from=weights, zero_shot=True)
 bt.comparison
 ```
 
@@ -28,8 +31,7 @@ saved weights and keeps training on your weeks.
 ## Then forecast with it
 
 ```python
-fc = af.forecast(my_city, models=[], horizons=(1,), init_from="boston_gnn_st_noadapt_h1.pt",
-                 zero_shot=True, backtest=bt)
+fc = af.forecast(my_city, models=[], init_from=weights, zero_shot=True, backtest=bt)
 ```
 
 The forecast's trust label comes from the `pretrained` row of that backtest.
@@ -41,14 +43,17 @@ zero-shot backtest.
 
 ## One file per horizon
 
-A saved model forecasts the one horizon it was trained for. To go 1-4 weeks
-ahead, give one file per horizon:
+A saved model forecasts the one horizon it was trained for. `af.pretrained`
+already returns one per horizon. For your own saved models, give one file per
+horizon:
 
 ```python
-weights = {h: f"boston_gnn_st_noadapt_h{h}.pt" for h in (1, 2, 3, 4)}
-bt = af.backtest(my_city, models=[], seasons=[2025], init_from=weights, zero_shot=True)
+weights = {h: f"runs/big_city/forecast_.../models/gnn_st_noadapt_h{h}.pt" for h in (1, 2, 3, 4)}
 fc = af.forecast(my_city, models=[], init_from=weights, zero_shot=True)
 ```
+
+`af.Checkpoint.load(path)` opens a single file, so you can see which horizon,
+inputs and city it came from.
 
 A single file with more than one horizon is an error: a 1-week model used 4
 weeks ahead would otherwise run without complaint and be wrong.
@@ -62,8 +67,17 @@ weeks ahead would otherwise run without complaint and be wrong.
     af.forecast(big_city, models=[source], save_models=True)   # writes models/*.pt
     ```
 
-- **Pretrained Boston weights:** one file per horizon, 1-4 weeks, published
-  with the first release.
+- **Bundled Boston models:** `af.pretrained("boston")`. These are the
+  transferable graph model, trained on every Boston week through May 2026,
+  with weather and no static characteristics. Applied untrained to Columbus's
+  2024-25 season, they were clearly better than persistence at 1 week, and
+  better on average but not clearly at 2-4 weeks. They saw Boston weeks from
+  after that season, so treat this as a sanity check and backtest them on your
+  data.
+
+Applying them is inference only, but it still runs 100 dropout samples per
+ensemble member on the validation weeks to calibrate the bands: about half a
+minute per horizon for 15 areas, and over a minute for 60.
 
 **Inputs must match.** A saved model expects the same inputs it was trained
 with. The Boston weights use weather and no static characteristics, so call

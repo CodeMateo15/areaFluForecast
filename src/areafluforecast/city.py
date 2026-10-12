@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import calendar
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -26,16 +27,13 @@ import numpy as np
 import pandas as pd
 
 from . import adjacency as adj
+from .errors import DataError, DataWarning
 from .weather import WEATHER_COLS, fetch_weather, read_weather_csv
 
 DEFAULT_FLU_MONTHS = (10, 11, 12, 1, 2, 3)
 
 
-class DataError(ValueError):
-    """The input data cannot be used as given. The message says what to fix."""
-
-
-@dataclass
+@dataclass(kw_only=True)
 class City:
     name: str
     rates: pd.DataFrame                              # weeks x areas
@@ -122,7 +120,7 @@ class City:
         return "\n".join(lines)
 
     # --- optional inputs ---------------------------------------------------
-    def fetch_weather(self, *, cache_dir: str | Path | None = None, verbose: bool = True) -> "City":
+    def fetch_weather(self, *, cache_dir: str | Path | None = None, verbose: bool = True) -> City:
         """Fetch weekly weather at each area's centroid from Open-Meteo (no key needed)."""
         if not self.centroids:
             raise DataError("No area centroids to fetch weather at. Build the city from a "
@@ -135,16 +133,30 @@ class City:
                                      self.rates.index, cache_dir=cache, verbose=verbose)
         return self
 
-    def with_rates(self, rates: pd.DataFrame) -> "City":
+    def with_rates(self, rates: pd.DataFrame) -> City:
         """A copy with different rates (same areas), e.g. extended with future weeks."""
         return replace(self, rates=rates, notes=list(self.notes))
 
     # --- constructors ------------------------------------------------------
     @classmethod
-    def from_frames(cls, name: str, rates: pd.DataFrame, *, edges=None, polygons=None,
-                    id_col=None, anchors=(), anchor_edges=(), **kwargs) -> "City":
-        """From in-memory objects. `polygons` is a list of GeoJSON features."""
-        centroids = kwargs.pop("centroids", None)
+    def from_frames(cls, name: str, rates: pd.DataFrame, *,
+                    edges: Iterable[tuple[str, str]] | None = None,
+                    polygons: list[dict] | None = None, id_col: str | None = None,
+                    anchors: Iterable[str] = (), anchor_edges: Iterable[tuple[str, str]] = (),
+                    flu_months: Iterable[int] = DEFAULT_FLU_MONTHS,
+                    centroids: dict[str, tuple[float, float]] | None = None,
+                    weather: dict[str, pd.DataFrame] | None = None,
+                    static: pd.DataFrame | None = None, label: str | None = None) -> City:
+        """From in-memory objects.
+
+        rates      weeks x areas frame of weekly rates.
+        polygons   a list of GeoJSON features; neighbours are derived from them,
+                   and `id_col` names the property holding the area id.
+        edges      alternatively, (area, area) pairs.
+        weather    {column: weeks x areas frame} for each of the weather columns.
+        static     areas x numeric characteristics.
+        The rest are as in `City`.
+        """
         if polygons is not None:
             if id_col is None:
                 raise DataError("Pass id_col: the GeoJSON property that holds the area id.")
@@ -158,16 +170,17 @@ class City:
         if edges is None:
             raise DataError("Give the graph: either polygons (a boundary file) or edges.")
         return cls(name=name, rates=rates, edges=list(edges), anchors=list(anchors),
-                   anchor_edges=list(anchor_edges), centroids=centroids, **kwargs)
+                   anchor_edges=list(anchor_edges), centroids=centroids, flu_months=flu_months,
+                   weather=weather, static=static, label=label)
 
     @classmethod
     def from_files(cls, rates: str | Path, *, areas: str | Path | None = None,
                    edges: str | Path | None = None, id_col: str | None = None,
-                   name: str | None = None, flu_months=DEFAULT_FLU_MONTHS,
+                   name: str | None = None, flu_months: Iterable[int] = DEFAULT_FLU_MONTHS,
                    week_col: str = "week", area_col: str = "area", rate_col: str = "rate",
-                   anchors=(), weather: str | Path | None = None,
+                   anchors: Iterable[str] = (), weather: str | Path | None = None,
                    static: str | Path | None = None,
-                   centroids: str | Path | None = None, label: str | None = None) -> "City":
+                   centroids: str | Path | None = None, label: str | None = None) -> City:
         """Build a city from files.
 
         rates   CSV, either long (columns `week`, `area`, `rate`) or wide (first
@@ -284,7 +297,7 @@ def _validate(city: City) -> None:
     if not set(city.flu_months) <= set(range(1, 13)) or not city.flu_months:
         raise DataError(f"flu_months must be calendar months 1-12, got {city.flu_months}.")
     try:
-        city.season_first_month
+        _ = city.season_first_month
     except StopIteration:
         raise DataError(f"flu_months {city.flu_months} must be one contiguous run of months.") from None
 
@@ -306,10 +319,11 @@ def _validate(city: City) -> None:
     lonely = adj.isolated(city.areas, city.edges)
     if lonely:
         warnings.warn(f"{lonely} border no other area, so the graph tells the model nothing "
-                      "about them. Check the boundary file or edge list.", stacklevel=3)
+                      "about them. Check the boundary file or edge list.", DataWarning, stacklevel=3)
     sparse = rates.columns[rates.isna().mean() > 0.5].tolist()
     if sparse:
-        warnings.warn(f"{sparse} are missing more than half their weeks.", stacklevel=3)
+        warnings.warn(f"{sparse} are missing more than half their weeks.", DataWarning,
+                      stacklevel=3)
     if city.weather is not None:
         absent = [c for c in WEATHER_COLS if c not in city.weather]
         if absent:

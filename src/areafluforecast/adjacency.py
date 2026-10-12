@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import pandas as pd
+
+from .errors import DataError
 
 PRECISION = 6            # decimal degrees, ~0.1 m
 MIN_SHARED_VERTICES = 2
@@ -34,7 +36,7 @@ def read_geojson(path: str | Path) -> list[dict]:
     payload = json.loads(Path(path).read_text())
     features = payload.get("features") if isinstance(payload, dict) else None
     if not features:
-        raise ValueError(f"{path} has no GeoJSON features.")
+        raise DataError(f"{path} has no GeoJSON features.")
     return features
 
 
@@ -45,7 +47,7 @@ def _id_getter(id_of: str | Callable[[dict], object]) -> Callable[[dict], str]:
     def get(feature: dict) -> str:
         properties = feature.get("properties") or {}
         if id_of not in properties:
-            raise KeyError(f"Feature has no property {id_of!r}. Available: {sorted(properties)}")
+            raise DataError(f"Feature has no property {id_of!r}. Available: {sorted(properties)}")
         return str(properties[id_of])
     return get
 
@@ -60,7 +62,7 @@ def _rings(geometry: dict) -> list[list]:
         return [ring for polygon in geometry["coordinates"] for ring in polygon]
     if kind == "GeometryCollection":
         return [ring for part in geometry["geometries"] for ring in _rings(part)]
-    raise ValueError(f"Unsupported geometry type {kind!r}; expected polygons.")
+    raise DataError(f"Unsupported geometry type {kind!r}; expected polygons.")
 
 
 def _vertices(geometry: dict, precision: int) -> set[tuple[float, float]]:
@@ -160,7 +162,7 @@ def read_edges_csv(path: str | Path) -> list[tuple[str, str]]:
     """Edges from a CSV whose first two columns are the two area ids."""
     frame = pd.read_csv(path, dtype=str)
     if frame.shape[1] < 2:
-        raise ValueError(f"{path} needs at least two columns (the two areas of each edge).")
+        raise DataError(f"{path} needs at least two columns (the two areas of each edge).")
     a, b = frame.columns[:2]
     return sorted({tuple(sorted((str(x).strip(), str(y).strip())))
                    for x, y in zip(frame[a], frame[b]) if str(x).strip() != str(y).strip()})

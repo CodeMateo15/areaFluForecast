@@ -11,18 +11,28 @@
 The models are the graph neural network evaluated in the accompanying paper, a
 multivariate LSTM and Cola-GNN, each compared with persistence ("next week
 looks like this week") on your own past seasons before you rely on it.
+
+Everything listed in `__all__` is the public API, covered by the versioning
+policy; the submodules adjacency, scoring, timing and weather are public too.
+Anything else may change without notice.
 """
 
-from .backtest import BacktestResult, backtest, latest_backtest
-from .checkpoint import load_checkpoint, save_checkpoint
-from .city import City, DataError, rates_from_counts, read_rates_csv
-from .configs import PRESETS, ColaGNNConfig, GNNConfig, LSTMConfig, resolve
+from . import adjacency, scoring, timing, weather
+from .backtest import BacktestResult, backtest, combine, latest_backtest
+from .checkpoint import Checkpoint, pretrained
+from .city import City, rates_from_counts, read_rates_csv
+from .configs import PRESETS, BaselineConfig, ColaGNNConfig, GNNConfig, LSTMConfig, ModelConfig, resolve
 from .datasets import load_city, load_sample, save_city
-from .forecast import ForecastResult, TrustWarning, forecast
+from .errors import DataError, DataWarning, TrustWarning
+from .forecast import ForecastResult, forecast
 
-__version__ = "0.2.0"
+__version__ = "1.0.0rc1"
 
-__all__ = ["City", "DataError", "backtest", "forecast", "load_sample", "load_city", "save_city", "BacktestResult",
-           "ForecastResult", "TrustWarning", "GNNConfig", "LSTMConfig", "ColaGNNConfig",
-           "PRESETS", "resolve", "latest_backtest", "save_checkpoint", "load_checkpoint",
-           "rates_from_counts", "read_rates_csv", "__version__"]
+__all__ = ["City", "load_sample", "load_city", "save_city", "rates_from_counts", "read_rates_csv",
+           "backtest", "BacktestResult", "latest_backtest", "combine",
+           "forecast", "ForecastResult",
+           "Checkpoint", "pretrained",
+           "GNNConfig", "LSTMConfig", "ColaGNNConfig", "BaselineConfig", "ModelConfig",
+           "PRESETS", "resolve",
+           "DataError", "DataWarning", "TrustWarning",
+           "adjacency", "scoring", "timing", "weather", "__version__"]

@@ -1,4 +1,4 @@
-# Maps, weather, checkpoints
+# Maps, weather, saved models
 
 ## Building the map
 
@@ -14,9 +14,8 @@
       show_root_heading: false
       members: [fetch_weather, read_weather_csv, WEATHER_COLS]
 
-## Saving and loading models
+## Saved and pretrained models
 
-::: areafluforecast.checkpoint
-    options:
-      show_root_heading: false
-      members: [save_checkpoint, load_checkpoint]
+::: areafluforecast.checkpoint.Checkpoint
+
+::: areafluforecast.checkpoint.pretrained

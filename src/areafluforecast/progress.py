@@ -26,7 +26,7 @@ class Progress:
         self.label = label
         self.started = time.time()
 
-    def start(self) -> "Progress":
+    def start(self) -> Progress:
         if self.enabled:
             print(f"Budget: {self.total} epochs x 1 seeds", flush=True)
             print("--- seed 1 (1/1) ---", flush=True)

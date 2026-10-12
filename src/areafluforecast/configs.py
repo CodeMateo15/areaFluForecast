@@ -14,7 +14,11 @@ import numpy as np
 
 @dataclass(frozen=True)
 class GNNConfig:
-    """The graph model ("gnn_st")."""
+    """The graph model ("gnn_st").
+
+    Experimental, outside the versioning policy (may change or go in a minor
+    release): `refit`, `drop_edge`, `corr_binary` and `two_sided_intervals`.
+    """
 
     kind: str = "gnn_st"
     lookback: int = 16
@@ -135,6 +139,20 @@ def resolve(model: str | ModelConfig, overrides: dict | None = None) -> ModelCon
             raise ValueError(f"{config.kind} has no settings {sorted(unknown)}.")
         config = replace(config, **overrides)
     return config
+
+
+# GNNConfig's default mc_seed sits this far above its default seed.
+MC_SEED_OFFSET = 81
+
+
+def with_seed(config: ModelConfig, seed: int | None) -> ModelConfig:
+    """`config` with every random seed derived from `seed` (unchanged when None)."""
+    if seed is None or not is_learned(config):
+        return config
+    changes = {"seed": int(seed)}
+    if isinstance(config, GNNConfig):
+        changes["mc_seed"] = int(seed) + MC_SEED_OFFSET
+    return replace(config, **changes)
 
 
 def is_learned(config: ModelConfig) -> bool:

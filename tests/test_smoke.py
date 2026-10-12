@@ -116,7 +116,7 @@ def test_one_horizon_checkpoint_is_not_reused(city, checkpoints):
 
 
 def test_pretrained_inputs_must_match(city, checkpoints):
-    with pytest.raises(ValueError, match="different input features"):
+    with pytest.raises(af.DataError, match="different input features"):
         af.forecast(city, models=[], horizons=(1,), init_from=checkpoints[1], zero_shot=True,
                     configs={"pretrained": {"use_weather": False}}, out_dir=None,
                     progress=False, backtest=None)
@@ -163,3 +163,17 @@ def test_save_and_load_city_round_trip(city, tmp_path):
     pd.testing.assert_frame_equal(again.rates, city.rates, check_freq=False)
     assert again.edges == city.edges and again.anchor_edges == city.anchor_edges
     assert again.has_weather and again.label == city.label
+
+
+def test_cli_forecast_with_bundled_boston_models(tmp_path, capsys):
+    from areafluforecast.cli import main
+    code = main(["forecast", "--sample", "boston", "--pretrained", "boston", "--zero-shot",
+                 "--models", "persistence", "--horizons", "1", "2", "--quick", "--no-progress",
+                 "--out", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert code == 0 and "pretrained" in out and "Trust check" in out
+    run = next((tmp_path / "boston").glob("forecast_*"))
+    result = af.ForecastResult.load(run)
+    assert set(result.table["model"]) == {"pretrained", "persistence"}
+    assert set(result.table["horizon"]) == {1, 2}
+    assert result.meta["init_from"]["1"].endswith("gnn_st_noadapt_h1.pt")

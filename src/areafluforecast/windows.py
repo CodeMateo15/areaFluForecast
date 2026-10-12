@@ -17,6 +17,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from .errors import DataError
+
 
 @dataclass(frozen=True)
 class Window:
@@ -78,7 +80,7 @@ def split_origins(index: pd.DatetimeIndex, origins: list[int], window: Window) -
     test = [t for t in origins
             if window.test_start <= index[t + first] <= window.test_end]
     if not test:
-        raise ValueError(
+        raise DataError(
             f"No forecast origins score inside {pd.Timestamp(window.test_start).date()}.."
             f"{pd.Timestamp(window.test_end).date()}; the data runs "
             f"{index.min().date()}..{index.max().date()}.")
@@ -90,12 +92,12 @@ def split_origins(index: pd.DatetimeIndex, origins: list[int], window: Window) -
     n_val = max(1, int(window.val_fraction * len(candidates)))
     train, val = candidates[:-n_val], candidates[-n_val:]
     if not val:
-        raise ValueError("Not enough history before the scored window to hold out validation weeks.")
+        raise DataError("Not enough history before the scored window to hold out validation weeks.")
     val_target_start = index[val[0] + first]
     train = [t for t in train if index[t + window.max_horizon] < val_target_start]
     val = [t for t in val if index[t + window.max_horizon] < test_target_start]
     if not train or not val:
-        raise ValueError(
+        raise DataError(
             f"Only {len(candidates)} usable origins before "
             f"{pd.Timestamp(window.test_start).date()}: too little history to train and "
             "validate. Supply more past weeks or score a later window.")

@@ -7,10 +7,10 @@ run_colagnn.py) so that the same configuration and seed train the same model.
 from __future__ import annotations
 
 import copy
-import os
 import random
+from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
 import torch
@@ -29,9 +29,9 @@ def seed_everything(seed: int) -> None:
     Multithreaded reductions sum in a nondeterministic order; because early
     stopping compares validation losses, a float tie broken differently selects a
     different epoch. One thread makes the seed an actual guarantee, and at this
-    model size it is faster besides.
+    model size it is faster besides. Call it inside `preserved_global_state()`
+    so the caller's generators and thread count are put back afterwards.
     """
-    os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -40,6 +40,26 @@ def seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+
+@contextmanager
+def preserved_global_state():
+    """Restore Python's, NumPy's and torch's global generators and torch's thread
+    count on exit, so training here leaves the user's session as it found it."""
+    states = (random.getstate(), np.random.get_state(), torch.get_rng_state(),
+              torch.get_num_threads(), torch.backends.cudnn.deterministic,
+              torch.backends.cudnn.benchmark)
+    cuda = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    try:
+        yield
+    finally:
+        random.setstate(states[0])
+        np.random.set_state(states[1])
+        torch.set_rng_state(states[2])
+        torch.set_num_threads(states[3])
+        torch.backends.cudnn.deterministic, torch.backends.cudnn.benchmark = states[4:]
+        if cuda is not None:
+            torch.cuda.set_rng_state_all(cuda)
 
 
 def masked_mse(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
