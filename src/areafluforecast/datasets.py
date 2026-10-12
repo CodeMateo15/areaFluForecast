@@ -20,8 +20,8 @@ from pathlib import Path
 import pandas as pd
 
 from .city import City
+from .formats import check, stamp
 from .weather import WEATHER_COLS, read_weather_csv
-
 
 SAMPLES = ("boston", "chicago")
 
@@ -41,7 +41,7 @@ def load_city(folder: str | Path, *, name: str | None = None, weather: bool = Tr
     """A city saved with `save_city`: rates.csv, edges.csv, centroids.csv,
     city.json and, optionally, weather.csv."""
     folder = Path(folder)
-    info = json.loads((folder / "city.json").read_text())
+    info = check(json.loads((folder / "city.json").read_text()), "city", folder)
     rates = pd.read_csv(folder / "rates.csv", parse_dates=["week"]).set_index("week")
     rates.columns = [str(c) for c in rates.columns]
     edges = pd.read_csv(folder / "edges.csv", dtype=str)
@@ -77,6 +77,6 @@ def save_city(city: City, folder: str | Path) -> Path:
         weather.round(3).reset_index().to_csv(folder / "weather.csv", index=False,
                                               date_format="%Y-%m-%d")
     (folder / "city.json").write_text(json.dumps(
-        {"name": city.name, "label": city.label, "flu_months": list(city.flu_months),
+        {**stamp("city"), "name": city.name, "label": city.label, "flu_months": list(city.flu_months),
          "anchors": list(city.anchors)}, indent=2) + "\n")
     return folder

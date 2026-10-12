@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .errors import DataError
+
 API_URL = "https://archive-api.open-meteo.com/v1/archive"
 DAILY_VARIABLES = {
     # Open-Meteo name: (column, weekly aggregation)
@@ -57,9 +59,13 @@ def fetch_daily(lat: float, lon: float, start: str, end: str, *, cache_dir: Path
             payload = response.json()
             break
         except Exception as exc:  # network errors and bad JSON alike
+            status = getattr(getattr(exc, "response", None), "status_code", None) or 0
+            limited = status == 429
+            if 400 <= status < 500 and not limited:
+                # The request itself is wrong (e.g. dates outside the archive); retrying won't help.
+                raise RuntimeError(f"Open-Meteo rejected the request ({status}): {exc}") from exc
             if attempt == MAX_RETRIES:
                 raise RuntimeError(f"Open-Meteo request failed after {MAX_RETRIES} tries: {exc}") from exc
-            limited = getattr(getattr(exc, "response", None), "status_code", 0) == 429
             # The free tier limits calls per minute: on a 429, wait out the minute.
             time.sleep(65 if limited else 2 ** attempt)
     if cache_file is not None:
@@ -123,7 +129,7 @@ def read_weather_csv(path: str | Path, *, week_col: str = "week", area_col: str 
     frame = pd.read_csv(path, parse_dates=[week_col])
     missing = [c for c in WEATHER_COLS if c not in frame.columns]
     if missing:
-        raise ValueError(f"{path} lacks weather columns {missing}. Expected: {WEATHER_COLS}")
+        raise DataError(f"{path} lacks weather columns {missing}. Expected: {WEATHER_COLS}")
     frame[area_col] = frame[area_col].astype(str)
     return {column: frame.pivot(index=week_col, columns=area_col, values=column).sort_index()
             for column in WEATHER_COLS}

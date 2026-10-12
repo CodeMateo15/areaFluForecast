@@ -1,0 +1,8 @@
+# The oldest dependency versions pyproject.toml allows; CI's minimum-dependencies
+# job installs exactly these. Raise a floor here and in pyproject.toml together.
+numpy==1.24.4
+pandas==2.0.3
+scipy==1.10.1
+torch==2.1.2
+torch-geometric==2.4.0
+requests==2.28.2

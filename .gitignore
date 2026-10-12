@@ -11,6 +11,7 @@ logs/
 parity_out/
 pretrained_out/
 *.pt
+!src/areafluforecast/pretrained/*/*.pt
 .ipynb_checkpoints/
 examples/runs/
 examples/data/chicago_cache/

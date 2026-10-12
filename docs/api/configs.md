@@ -16,6 +16,11 @@ Every model is described by a settings object. Pass a preset name such as
 | `colagnn` | Cola-GNN |
 | `persistence`, `seasonal_naive` | baselines, always included in backtests |
 
+**Experimental settings.** A few `GNNConfig` and interval settings come from
+research ablations and are not covered by the versioning policy. They may
+change or be removed in a minor release: `refit`, `drop_edge`, `corr_binary`
+and `two_sided_intervals`. Every other setting is stable.
+
 ::: areafluforecast.configs.resolve
 
 ::: areafluforecast.configs.GNNConfig

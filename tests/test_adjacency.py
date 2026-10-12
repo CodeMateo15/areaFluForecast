@@ -2,8 +2,12 @@ import json
 
 import pytest
 
-from areafluforecast.adjacency import (adjacency_from_polygons, centroids_from_polygons,
-                                       read_edges_csv, read_geojson)
+from areafluforecast.adjacency import (
+    adjacency_from_polygons,
+    centroids_from_polygons,
+    read_edges_csv,
+    read_geojson,
+)
 
 
 def square(name, x, y, size=1.0):

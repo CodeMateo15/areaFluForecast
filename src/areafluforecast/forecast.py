@@ -8,32 +8,37 @@ horizon, whether that model actually beat persistence there.
 
 from __future__ import annotations
 
+import json
 import time
 import warnings
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from .backtest import DEFAULT_RUN_DIR, BacktestResult, latest_backtest
-from .checkpoint import load_init, save_checkpoint
+from .checkpoint import InitSource, describe_init, load_init, save_checkpoint
 from .city import City
-from .configs import DEFAULT_MODELS, is_learned, resolve, to_json
+from .configs import DEFAULT_MODELS, ModelConfig, is_learned, resolve, to_json, with_seed
 from .engine import run_model, units
+from .errors import DataError, TrustWarning
+from .formats import check, stamp
 from .intervals import QUANTILE_COLUMNS, QUANTILE_LEVELS
 from .progress import Progress
 from .tune import tune_config, tuning_units
 
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
+
 NO_BACKTEST = "not backtested"
 OTHER_SETTINGS = "backtested with other settings"
+SEED_FIELDS = ("seed", "mc_seed")
 
 
-class TrustWarning(UserWarning):
-    """A forecast comes from a model that has not shown it beats persistence here."""
-
-
-@dataclass
+@dataclass(kw_only=True)
 class ForecastResult:
     city: str
     table: pd.DataFrame          # one row per model x horizon x area
@@ -47,6 +52,40 @@ class ForecastResult:
         path = Path(path)
         self.table.to_csv(path, index=False)
         return path
+
+    def save(self, path: str | Path) -> Path:
+        """Write the forecast folder: forecast.csv, forecast_flusight.csv, history.csv,
+        trust.md and forecast.json. `ForecastResult.load` reads it back."""
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        self.to_csv(path / "forecast.csv")
+        self.to_flusight().to_csv(path / "forecast_flusight.csv", index=False)
+        history = self.history.copy()
+        history.index.name = "week"
+        history.to_csv(path / "history.csv", date_format="%Y-%m-%d")
+        (path / "trust.md").write_text(
+            "# Trust check\n\n" + "\n".join(f"- {n}" for n in self.warnings or [
+                "Every model beat persistence in the backtest."]) + "\n")
+        meta = {k: v for k, v in self.meta.items() if k != "package_version"}
+        (path / "forecast.json").write_text(json.dumps(
+            {**stamp("forecast"), "city": self.city, "warnings": self.warnings, **meta},
+            indent=2, default=str) + "\n")
+        self.path = path
+        return path
+
+    @classmethod
+    def load(cls, path: str | Path) -> ForecastResult:
+        """A forecast folder written by `save` (or by `forecast()` with an out_dir)."""
+        path = Path(path)
+        meta = check(json.loads((path / "forecast.json").read_text()), "forecast", path)
+        table = pd.read_csv(path / "forecast.csv", parse_dates=["origin_date", "target_date"])
+        table["area"] = table["area"].astype(str)
+        history = pd.read_csv(path / "history.csv", parse_dates=["week"]).set_index("week")
+        history.columns = [str(c) for c in history.columns]
+        trust = (table[["model", "horizon", "trust"]].drop_duplicates()
+                 .reset_index(drop=True) if "trust" in table else pd.DataFrame())
+        return cls(city=meta.pop("city"), table=table, history=history, trust=trust,
+                   warnings=meta.pop("warnings", []), meta=meta, path=path)
 
     def to_flusight(self, model: str | None = None) -> pd.DataFrame:
         """FluSight hub layout: one row per quantile."""
@@ -68,7 +107,7 @@ class ForecastResult:
                            "upper", "trust"]].sort_values(["model", "horizon", "area"])
 
     def plot(self, model: str | None = None, *, areas: list[str] | None = None,
-             weeks_of_history: int = 26, path: str | Path | None = None):
+             weeks_of_history: int = 26, path: str | Path | None = None) -> Figure:
         from .plots import plot_forecast
         return plot_forecast(self, model=model, areas=areas, weeks_of_history=weeks_of_history,
                              path=path)
@@ -79,9 +118,11 @@ def _settings_differ(backtest: BacktestResult, model: str, horizon: int,
     """Why the backtest's verdict for `model` does not carry over to this forecast, if so."""
     meta = backtest.meta
     base = (meta.get("base_configs") or {}).get(model)
-    if base is not None and base != settings["configs"].get(model):
-        changed = sorted(k for k in set(base) | set(settings["configs"][model])
-                         if base.get(k) != settings["configs"][model].get(k))
+    ours = settings["configs"].get(model) or {}
+    # Seeds pick one draw of the same model; they don't change what was tested.
+    changed = sorted(k for k in set(base or {}) | set(ours)
+                     if k not in SEED_FIELDS and (base or {}).get(k) != ours.get(k))
+    if base is not None and changed:
         return f"its settings differ from the backtest's ({', '.join(changed)})"
     if model in settings["learned"] and bool(meta.get("tuned")) != settings["tuned"]:
         return ("the backtest tuned its settings and this forecast does not" if meta.get("tuned")
@@ -133,11 +174,12 @@ def _trust(backtest: BacktestResult | None, models, horizons,
     return pd.DataFrame(rows), notes
 
 
-def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
+def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *,
+             horizons: Iterable[int] = (1, 2, 3, 4),
              configs: dict | None = None, tune: bool = False,
              backtest: BacktestResult | str | Path | None = "latest",
-             init_from: str | Path | dict | None = None, zero_shot: bool = False,
-             out_dir: str | Path | None = DEFAULT_RUN_DIR, save_models: bool = False,
+             init_from: InitSource | None = None, zero_shot: bool = False,
+             seed: int | None = None, out_dir: str | Path | None = DEFAULT_RUN_DIR, save_models: bool = False,
              progress: bool = True, device: str | None = None) -> ForecastResult:
     """Forecast 1..max(horizons) weeks past the last observed week.
 
@@ -145,8 +187,14 @@ def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
                out_dir (nothing is looked up when out_dir is None); pass a
                BacktestResult or a saved backtest folder; None skips the check.
     init_from  a saved checkpoint to start the graph model from (transfer from a
-               city with more history): one file for a single horizon, or
-               {horizon: file}. zero_shot=True applies it without training.
+               city with more history): a file or Checkpoint for a single horizon,
+               or {horizon: file or Checkpoint}, such as af.pretrained("boston").
+               zero_shot=True applies it without training.
+    seed       derive every model's random seeds from this one number.
+    out_dir    where the run is saved, as <out_dir>/<city name>/forecast_<time>/;
+               None saves nothing (and looks up no backtest).
+    save_models  also save each trained model there, as models/<model>_h<h>.pt.
+    device     "cpu" (the default) or e.g. "cuda".
     """
     configs = configs or {}
     resolved = {}
@@ -160,10 +208,11 @@ def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
         # Labelled "pretrained", as backtest() labels it, so the trust check
         # matches this forecast to the pretrained model's own backtest verdict.
         resolved["pretrained"] = resolve(init.config, configs.get("pretrained"))
+    resolved = {name: with_seed(config, seed) for name, config in resolved.items()}
 
     last = city.rates.index.max()
     if city.rates.loc[last].isna().all():
-        raise ValueError(f"The last week ({last.date()}) has no data in any area; drop it so the "
+        raise DataError(f"The last week ({last.date()}) has no data in any area; drop it so the "
                          "forecast starts from an observed week.")
     future = pd.date_range(last + pd.Timedelta(days=7), periods=max(horizons), freq="7D")
     extended = pd.concat([city.rates, pd.DataFrame(np.nan, index=future, columns=city.areas)])
@@ -173,8 +222,9 @@ def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
     total = sum(units(c) + (tuning_units(c) if tune else 0) for c in resolved.values()) * len(horizons)
     bar = Progress(total, enabled=progress).start()
     frames, chosen, saved = [], {}, []
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    run_path = Path(out_dir) / city.name / f"forecast_{stamp}" if out_dir is not None else None
+    started = time.localtime()
+    run_path = (Path(out_dir) / city.name / f"forecast_{time.strftime('%Y%m%d-%H%M%S', started)}"
+                if out_dir is not None else None)
     for horizon in horizons:
         for name, config in resolved.items():
             use = config
@@ -213,14 +263,10 @@ def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
         city=city.name, table=table, history=city.rates, trust=trust, warnings=notes,
         meta={"last_observed_week": str(last.date()), "horizons": list(horizons),
               "configs": chosen, "backtest": str(backtest.path) if backtest is not None else None,
-              "saved_models": saved, "created": stamp})
+              "saved_models": saved, "created": time.strftime("%Y-%m-%dT%H:%M:%S", started),
+              "seed": seed, "tuned": bool(tune),
+              "init_from": describe_init(init_from)})
     if run_path is not None:
-        run_path.mkdir(parents=True, exist_ok=True)
-        result.to_csv(run_path / "forecast.csv")
-        result.to_flusight().to_csv(run_path / "forecast_flusight.csv", index=False)
-        (run_path / "trust.md").write_text(
-            "# Trust check\n\n" + "\n".join(f"- {n}" for n in notes or ["Every model beat "
-                                                                   "persistence in the backtest."]) + "\n")
-        result.path = run_path
+        result.save(run_path)
         bar.finish(run_path)
     return result

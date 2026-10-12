@@ -2,8 +2,14 @@ import numpy as np
 import pandas as pd
 
 from areafluforecast.intervals import QUANTILE_COLUMNS, QUANTILE_LEVELS, fit_intervals
-from areafluforecast.scoring import (add_cell_scores, compare_to_reference, diebold_mariano,
-                                     holm, interval_score, wis_from_quantiles)
+from areafluforecast.scoring import (
+    add_cell_scores,
+    compare_to_reference,
+    diebold_mariano,
+    holm,
+    interval_score,
+    wis_from_quantiles,
+)
 
 
 def test_wis_equals_interval_form():

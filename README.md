@@ -146,8 +146,12 @@ A department with only a season or two of data can start from a model trained
 elsewhere:
 
 ```python
-fc = af.forecast(city, init_from="boston_gnn_st_noadapt_h1.pt", zero_shot=True, horizons=(1,))
+weights = af.pretrained("boston")          # bundled: one model per horizon, 1-4 weeks
+bt = af.backtest(city, models=["gnn_st_noadapt"], init_from=weights, zero_shot=True)
+fc = af.forecast(city, init_from=weights, zero_shot=True)
 ```
+
+Or from the shell: `areaflu backtest --city city.json --weather --pretrained boston --zero-shot`.
 
 In the paper, a Boston model applied to Columbus with no Columbus training tied
 a model trained on Columbus itself and beat persistence. The reverse direction
@@ -156,8 +160,9 @@ a model trained on Columbus itself and beat persistence. The reverse direction
 Limits:
 - **The inputs must match.** The pretrained model uses weather and no static
   characteristics, so call `city.fetch_weather()` first.
-- **Backtest it on your data before trusting it.** Pretrained Boston weights
-  are published with the release.
+- **Backtest it on your data before trusting it.** Applied untrained to
+  Columbus, the bundled Boston models were clearly better than persistence only
+  at 1 week. The forecast's trust label comes from that backtest.
 
 ## Limits to know
 

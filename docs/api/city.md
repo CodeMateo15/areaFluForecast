@@ -10,6 +10,14 @@ bundled Boston sample.
 
 ::: areafluforecast.city.rates_from_counts
 
-::: areafluforecast.city.DataError
-
 ::: areafluforecast.datasets.load_sample
+
+::: areafluforecast.datasets.load_city
+
+::: areafluforecast.datasets.save_city
+
+## Errors and warnings
+
+::: areafluforecast.errors.DataError
+
+::: areafluforecast.errors.DataWarning

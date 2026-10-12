@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import random
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -17,12 +17,21 @@ import torch
 from .city import City
 from .climatology import fit_climatology
 from .configs import BaselineConfig, ColaGNNConfig, GNNConfig, LSTMConfig, ModelConfig, to_json
+from .errors import DataError, DataWarning
 from .graphs import GraphSpec, build_graph
 from .intervals import QUANTILE_COLUMNS, attach_intervals, fit_intervals
 from .models import ColaGNN, MultivariateLSTM, SpatioTemporalGNN, blend_init
 from .samples import FeatureSpec, build_dataset, build_samples, impute_causal, sequence_arrays
-from .training import (assert_mc_dropout_valid, calibrate_intervals, mc_dropout_stgnn,
-                       seed_everything, train_sequence_model, train_stgnn)
+from .training import (
+    assert_mc_dropout_valid,
+    calibrate_intervals,
+    mc_dropout_stgnn,
+    preserved_global_state,
+    seed_everything,
+    train_sequence_model,
+    train_stgnn,
+)
+from .weather import WEATHER_COLS
 from .windows import Split, Window, normalization, split_origins, train_end, valid_origins
 
 # Called once per finished unit of work (one ensemble member, or one baseline).
@@ -33,7 +42,8 @@ UnitCallback = Callable[[str], None] | None
 class FitOutput:
     """Forecasts for the scored origins, plus what is needed to reuse the model."""
 
-    test: pd.DataFrame          # origin_date, target_date, horizon, area, actual, predicted, lower, upper, q...
+    test: pd.DataFrame          # origin_date, target_date, horizon, area, actual, predicted,
+                                # lower, upper, q...
     val: pd.DataFrame           # validation-split point forecasts
     config: ModelConfig
     members: list[dict] = field(default_factory=list)      # state_dicts
@@ -56,7 +66,7 @@ def make_split(index: pd.DatetimeIndex, window: Window, *, only_origin: int | No
     split = split_origins(index, valid_origins(index, window), window)
     if only_origin is not None:
         if only_origin not in split.test:
-            raise ValueError("The forecast origin is not a valid origin; is the last week observed "
+            raise DataError("The forecast origin is not a valid origin; is the last week observed "
                              "with a full lookback behind it?")
         split = replace(split, test=[only_origin])
     return split
@@ -72,21 +82,24 @@ def run_model(city: City, config: ModelConfig, *, horizon: int, test_start, test
     `rates` overrides the city's rates (forecasting passes them extended with
     empty future weeks). `only_origin` keeps a single scored origin.
     `init_members` are saved weights to start from; `init_features` the input
-    feature names they were trained on, checked against this city's.
+    feature names they were trained on, checked against this city's. `device`
+    defaults to the CPU. The caller's random generators and torch thread count
+    are restored afterwards.
     """
     rates = city.rates if rates is None else rates
     window = make_window(config, horizon, test_start, test_end)
     split = make_split(rates.index, window, only_origin=only_origin)
-    torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    if isinstance(config, GNNConfig):
-        out = _run_gnn(city, config, rates, window, split, torch_device, init_members,
-                       zero_shot, init_features, on_unit)
-    elif isinstance(config, (LSTMConfig, ColaGNNConfig)):
-        out = _run_sequence(city, config, rates, window, split, torch_device, on_unit)
-    elif isinstance(config, BaselineConfig):
-        out = _run_baseline(city, config, rates, window, split, on_unit)
-    else:
-        raise TypeError(f"Unknown config {type(config).__name__}")
+    torch_device = torch.device(device or "cpu")
+    with preserved_global_state():
+        if isinstance(config, GNNConfig):
+            out = _run_gnn(city, config, rates, window, split, torch_device, init_members,
+                           zero_shot, init_features, on_unit)
+        elif isinstance(config, (LSTMConfig, ColaGNNConfig)):
+            out = _run_sequence(city, config, rates, window, split, torch_device, on_unit)
+        elif isinstance(config, BaselineConfig):
+            out = _run_baseline(city, config, rates, window, split, on_unit)
+        else:
+            raise TypeError(f"Unknown config {type(config).__name__}")
     out.meta.update({"horizon": int(horizon), "window": window.to_json(),
                      "split": split.to_json(), "config": to_json(config)})
     return out
@@ -153,9 +166,12 @@ def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members
                   else "the same features in a different order")
         message = (f"The saved model was trained on different input features ({detail}). It "
                    "needs the same inputs: weather on or off, the same weather and static columns.")
+        if (set(theirs) - set(ours)) & set(WEATHER_COLS):
+            message += " Call city.fetch_weather() first."
         if zero_shot:
-            raise ValueError(message)
-        warnings.warn(message + " Inputs that differ start from untrained weights.", stacklevel=4)
+            raise DataError(message)
+        warnings.warn(message + " Inputs that differ start from untrained weights.", DataWarning,
+                      stacklevel=4)
 
     def build() -> SpatioTemporalGNN:
         return SpatioTemporalGNN(
@@ -186,9 +202,9 @@ def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members
                            "could not be loaded. A pretrained model needs the same input features "
                            "(weather on or off, same static columns) and adaptive=False.")
                 if zero_shot:
-                    raise ValueError(message)
+                    raise DataError(message)
                 warnings.warn(message + " Those layers start from random weights and are "
-                              "trained here.", stacklevel=4)
+                              "trained here.", DataWarning, stacklevel=4)
             model.load_state_dict(loadable, strict=False)
         assert_mc_dropout_valid(model)
         if not zero_shot:
@@ -293,7 +309,7 @@ def _run_sequence(city, config, rates, window, split, device, on_unit) -> FitOut
                                             seed=seed, use_clim=is_lstm))
         model.eval()
         with torch.no_grad():
-            def predict(x, c):
+            def predict(x, c, model=model):
                 x_t, c_t = torch.from_numpy(x).to(device), torch.from_numpy(c).to(device)
                 return model(x_t, c_t).cpu().numpy() if is_lstm else model(x_t).cpu().numpy()
             test_draws.append(predict(x_test, c_test) * std[:, None, :] + mean[:, None, :])

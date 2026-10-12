@@ -11,18 +11,23 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from .checkpoint import InitSource, describe_init, load_init
 from .city import City
-from .configs import BASELINES, DEFAULT_MODELS, ModelConfig, is_learned, resolve, to_json
+from .configs import BASELINES, DEFAULT_MODELS, ModelConfig, is_learned, resolve, to_json, with_seed
 from .engine import run_model, units
+from .errors import DataError
+from .formats import check, stamp
 from .progress import Progress
 from .scoring import add_cell_scores, compare_to_reference
-from .timing import describe as describe_timing, timing_table
+from .timing import describe as describe_timing
+from .timing import timing_table
 from .tune import tune_config, tuning_units
 
 SIGNIFICANCE = 0.05
@@ -38,7 +43,7 @@ def _verdict(row) -> str:
     return "worse than persistence" if clear else "no better than persistence"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BacktestResult:
     city: str
     predictions: pd.DataFrame
@@ -97,15 +102,17 @@ class BacktestResult:
         if self.tuning:
             pd.DataFrame(self.tuning).to_csv(path / "tuning.csv", index=False)
         (path / "report.md").write_text(self.report(show=False) + "\n")
+        meta = {k: v for k, v in self.meta.items() if k not in ("unverified", "package_version")}
         (path / "backtest.json").write_text(json.dumps(
-            {"city": self.city, "configs": self.configs, **self.meta}, indent=2, default=str))
+            {**stamp("backtest"), "city": self.city, "configs": self.configs, **meta}, indent=2,
+            default=str))
         self.path = path
         return path
 
     @classmethod
-    def load(cls, path: str | Path) -> "BacktestResult":
+    def load(cls, path: str | Path) -> BacktestResult:
         path = Path(path)
-        meta = json.loads((path / "backtest.json").read_text())
+        meta = check(json.loads((path / "backtest.json").read_text()), "backtest", path)
         predictions = pd.read_csv(path / "predictions.csv",
                                   parse_dates=["origin_date", "target_date"])
         tuning_file = path / "tuning.csv"
@@ -125,14 +132,14 @@ def _seasons(city: City, seasons) -> list[int]:
         seasons = 2
     if isinstance(seasons, int):
         if not available:
-            raise ValueError(f"{city.label} has no complete season with two years of history "
+            raise DataError(f"{city.label} has no complete season with two years of history "
                              "before it, so there is nothing to backtest yet.")
         return available[-seasons:]
     chosen = [int(s) for s in seasons]
     return chosen
 
 
-def data_fingerprint(city: City, end) -> str:
+def data_fingerprint(city: City, end: str | pd.Timestamp) -> str:
     """Hash of the areas and every weekly rate up to `end`, to match a backtest to its data."""
     areas = sorted(city.areas)
     rates = city.rates.loc[:pd.Timestamp(end), areas]
@@ -143,9 +150,11 @@ def data_fingerprint(city: City, end) -> str:
     return digest.hexdigest()
 
 
-def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2, 3, 4),
+def backtest(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *,
+             seasons: int | Iterable[int] | None = None, horizons: Iterable[int] = (1, 2, 3, 4),
              configs: dict | None = None, tune: bool = False, out_dir: str | Path | None = DEFAULT_RUN_DIR,
-             init_from: str | Path | dict | None = None, zero_shot: bool = True,
+             init_from: InitSource | None = None, zero_shot: bool = True,
+             seed: int | None = None,
              progress: bool = True, device: str | None = None) -> BacktestResult:
     """Train on the weeks before each past season and forecast that season.
 
@@ -157,9 +166,15 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
     tune     pick each learned model's settings per season from 12 candidates on
              validation weeks (12x the training time), as the paper did.
     init_from  a saved graph-model checkpoint (e.g. one trained in another city) to
-             backtest alongside the other models, as "pretrained": one file for a
-             single horizon, or {horizon: file}. zero_shot=True applies it with no
-             training here; False fine-tunes it on each season's training weeks.
+             backtest alongside the other models, as "pretrained": a file or
+             Checkpoint for a single horizon, or {horizon: file or Checkpoint}, such
+             as af.pretrained("boston"). zero_shot=True applies it with no training
+             here; False fine-tunes it on each season's training weeks.
+    seed     derive every model's random seeds from this one number (default:
+             each config's own seeds, which reproduce the paper).
+    device   "cpu" (the default) or e.g. "cuda".
+    out_dir  where the run is saved, as <out_dir>/<city name>/backtest_<time>/;
+             None saves nothing.
     """
     configs = configs or {}
     resolved = {}
@@ -170,9 +185,9 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
     horizons = tuple(int(h) for h in horizons)
     init = None
     if init_from is not None:
-        from .checkpoint import load_init
         init = load_init(init_from, horizons)
         resolved["pretrained"] = resolve(init.config, configs.get("pretrained"))
+    resolved = {name: with_seed(config, seed) for name, config in resolved.items()}
 
     total = sum((units(c) + (tuning_units(c) if tune else 0)) for c in resolved.values())
     total *= len(years) * len(horizons)
@@ -197,7 +212,7 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
                                    init_members=init.members[horizon] if pretrained else None,
                                    init_features=init.feature_names[horizon] if pretrained else None,
                                    zero_shot=zero_shot and pretrained,
-                                   on_unit=lambda m, l=label, h=horizon: bar.step(f"{l} {h}wk {m}"),
+                                   on_unit=lambda m, s=label, h=horizon: bar.step(f"{s} {h}wk {m}"),
                                    device=device)
                 frame = output.test.assign(model=name, season=label)
                 frames.append(frame)
@@ -214,7 +229,8 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
               "data_end": str(pd.Timestamp(data_end).date()),
               "fingerprint": data_fingerprint(city, data_end),
               "base_configs": {name: to_json(c) for name, c in resolved.items()},
-              "zero_shot": zero_shot if init is not None else None,
+              "zero_shot": zero_shot if init is not None else None, "seed": seed,
+              "init_from": describe_init(init_from),
               "init_digest": ({str(h): d for h, d in init.digests.items()}
                               if init is not None else None)})
     if out_dir is not None:

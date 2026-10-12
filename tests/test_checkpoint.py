@@ -1,7 +1,5 @@
 """Checkpoint safety, horizon matching, and matching backtests to the data and settings."""
 
-from types import SimpleNamespace
-
 import pandas as pd
 import pytest
 import torch
@@ -19,37 +17,51 @@ class NotAllowed:
 
 def save(path, horizon, *, channels=24):
     config = af.resolve("gnn_st_noadapt", {"channels": channels})
-    output = SimpleNamespace(config=config, members=[{"w": torch.ones(2, 2) * horizon}],
-                             meta={"horizon": horizon, "feature_names": ["flu_lag0"]})
-    return af.save_checkpoint(path, output, city_name="t", areas=["a", "b"])
+    return af.Checkpoint(config=config, members=[{"w": torch.ones(2, 2) * horizon}],
+                         horizon=horizon, city="t", areas=["a", "b"],
+                         feature_names=["flu_lag0"]).save(path)
 
 
 def test_round_trip_records_versions(tmp_path):
-    config, members, payload = af.load_checkpoint(save(tmp_path / "h1.pt", 1))
-    assert config.kind == "gnn_st_noadapt" and torch.equal(members[0]["w"], torch.ones(2, 2))
-    assert payload["package_version"] == af.__version__
+    checkpoint = af.Checkpoint.load(save(tmp_path / "h1.pt", 1))
+    assert checkpoint.config.kind == "gnn_st_noadapt" and checkpoint.horizon == 1
+    assert torch.equal(checkpoint.members[0]["w"], torch.ones(2, 2))
+    assert checkpoint.package_version == af.__version__ and checkpoint.areas == ["a", "b"]
+    assert checkpoint.feature_names == ["flu_lag0"] and len(checkpoint.digest) == 64
+    payload = torch.load(checkpoint.path, weights_only=True)
     assert isinstance(payload["torch_version"], str)
+
+
+def test_bundled_boston_models():
+    weights = af.pretrained("boston")
+    assert sorted(weights) == [1, 2, 3, 4]
+    assert all(c.horizon == h and len(c.members) == 10 for h, c in weights.items())
+    assert weights[1].config.kind == "gnn_st_noadapt" and not weights[1].config.adaptive
+    assert "temp_mean_c" in weights[1].feature_names
+    with pytest.raises(ValueError, match="Bundled pretrained models"):
+        af.pretrained("paris")
 
 
 def test_newer_format_asks_for_upgrade(tmp_path):
     torch.save({"format": "areafluforecast-checkpoint-2", "config": {}}, tmp_path / "x.pt")
     with pytest.raises(ValueError, match="Upgrade the package"):
-        af.load_checkpoint(tmp_path / "x.pt")
+        af.Checkpoint.load(tmp_path / "x.pt")
 
 
 def test_not_a_checkpoint(tmp_path):
     torch.save({"something": 1}, tmp_path / "x.pt")
     with pytest.raises(ValueError, match="not an areaFluForecast checkpoint"):
-        af.load_checkpoint(tmp_path / "x.pt")
+        af.Checkpoint.load(tmp_path / "x.pt")
 
 
 def test_files_that_need_unpickling_are_refused(tmp_path):
     torch.save({"model_state_dict": {"w": torch.zeros(1)}, "extra": NotAllowed()},
                tmp_path / "research.pt")
     with pytest.raises(ValueError, match="could run code"):
-        af.load_checkpoint(tmp_path / "research.pt")
-    config, members, _ = af.load_checkpoint(tmp_path / "research.pt", trust_research_file=True)
-    assert config.kind == "gnn_st_noadapt" and len(members) == 1
+        af.Checkpoint.load(tmp_path / "research.pt")
+    checkpoint = af.Checkpoint.load(tmp_path / "research.pt", trust_research_file=True)
+    assert checkpoint.config.kind == "gnn_st_noadapt" and len(checkpoint.members) == 1
+    assert checkpoint.horizon is None
 
 
 def test_one_horizon_file_is_not_reused_for_others(tmp_path):
@@ -71,6 +83,9 @@ def test_horizon_map(tmp_path):
     other = save(tmp_path / "other.pt", 2, channels=8)
     with pytest.raises(ValueError, match="different model settings"):
         load_init({1: paths[1], 2: other}, (1, 2))
+    # Checkpoint objects work as well as paths.
+    loaded = {h: af.Checkpoint.load(p) for h, p in paths.items()}
+    assert load_init(loaded, (1, 2)).digests == init.digests
 
 
 # --- matching a saved backtest to the data -------------------------------------

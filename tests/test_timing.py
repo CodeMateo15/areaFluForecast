@@ -53,6 +53,7 @@ def test_matches_research_compare_timing():
         pytest.skip("research predictions not available")
     sys.path.insert(0, str(REPO / "Code"))
     import argparse
+
     import compare_timing
 
     frame = pd.read_csv(path, parse_dates=["origin_date", "target_date"])
