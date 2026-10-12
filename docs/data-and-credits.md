@@ -14,6 +14,9 @@
   terms; the City of Chicago makes no claims as to their content, accuracy,
   timeliness or completeness, and they are used at one's own risk.
 - **Weather** is by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
+- **Pretrained Boston models** (`af.pretrained("boston")`) hold only model
+  weights, trained on Boston Public Health Commission weekly neighborhood data.
+  No case or visit data are in them.
 - **Nothing else is bundled.** The package contains no data from any other
   health department.
 
@@ -45,5 +48,7 @@ University).
 
 ## Citing
 
-The repository's `CITATION.cff` has the citation details. A Zenodo DOI will be
-added with the first release.
+Please cite the version you used. The citation details are in
+[`CITATION.cff`](https://github.com/CodeMateo15/areaFluForecast/blob/main/CITATION.cff),
+and GitHub's **Cite this repository** button formats them as APA or BibTeX.
+Each release is archived on [Zenodo](https://zenodo.org/), which gives it a DOI.

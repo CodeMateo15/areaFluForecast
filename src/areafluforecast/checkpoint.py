@@ -125,6 +125,14 @@ def save_checkpoint(path: str | Path, output: FitOutput, *, city_name: str, area
                       meta=output.meta).save(path)
 
 
+def load_checkpoint(path: str | Path, *, trust_research_file: bool = False
+                    ) -> tuple[ModelConfig, list[dict], dict]:
+    """(config, member state_dicts, everything else), as in 0.1. Use `Checkpoint.load`."""
+    checkpoint = Checkpoint.load(path, trust_research_file=trust_research_file)
+    return checkpoint.config, checkpoint.members, {"meta": checkpoint.meta, "city": checkpoint.city,
+                                                   "areas": checkpoint.areas}
+
+
 def pretrained(name: str = "boston", horizons: Iterable[int] = (1, 2, 3, 4)
                ) -> dict[int, Checkpoint]:
     """The bundled pretrained models, one per horizon, ready for `init_from=`.

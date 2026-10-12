@@ -32,6 +32,13 @@ def test_round_trip_records_versions(tmp_path):
     assert isinstance(payload["torch_version"], str)
 
 
+def test_old_functions_still_work_with_a_warning(tmp_path):
+    path = save(tmp_path / "h1.pt", 1)
+    with pytest.warns(DeprecationWarning, match="Checkpoint.load"):
+        config, members, _ = af.load_checkpoint(path)
+    assert config.kind == "gnn_st_noadapt" and len(members) == 1
+
+
 def test_bundled_boston_models():
     weights = af.pretrained("boston")
     assert sorted(weights) == [1, 2, 3, 4]
