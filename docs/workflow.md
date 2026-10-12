@@ -45,8 +45,11 @@ fc.plot("gnn_st")                      # needs the [plot] extra
 Every model trains on all weeks whose outcome is already known, then forecasts
 from your last observed week.
 
-**The trust check.** `forecast()` finds the most recent backtest for the city
-and adds a `trust` column per model and horizon:
+**The trust check.** `forecast()` finds the most recent backtest of the
+city's data in `out_dir` and adds a `trust` column per model and horizon. A
+saved backtest counts only if it was run on the same areas and the same weekly
+rates up to the end of its last season. Weeks added since don't matter, so one
+backtest keeps vouching for your weekly forecasts until past data changes.
 
 | trust | meaning |
 |---|---|
@@ -54,11 +57,12 @@ and adds a `trust` column per model and horizon:
 | not clearly better than persistence | lower WIS on average, but the gap could be noise |
 | no better / worse than persistence | don't use this model at this horizon |
 | not backtested | no evidence either way; run a backtest that includes this horizon |
+| backtested with other settings | the backtest ran this model differently (other settings, tuning, or pretrained use), so its verdict doesn't apply |
 
 Anything other than "better than persistence" also raises a `TrustWarning`.
 
 Pass `backtest=None` to skip the check, or `backtest=bt` to use a particular
-backtest. `save_models=True` writes each trained model to the run folder.
+backtest. With `out_dir=None`, nothing is looked up. `save_models=True` writes each trained model to the run folder.
 
 ## How long it takes
 

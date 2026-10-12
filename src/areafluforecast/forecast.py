@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .backtest import DEFAULT_RUN_DIR, BacktestResult, latest_backtest
-from .checkpoint import load_checkpoint, save_checkpoint
+from .checkpoint import load_init, save_checkpoint
 from .city import City
 from .configs import DEFAULT_MODELS, is_learned, resolve, to_json
 from .engine import run_model, units
@@ -26,6 +26,7 @@ from .progress import Progress
 from .tune import tune_config, tuning_units
 
 NO_BACKTEST = "not backtested"
+OTHER_SETTINGS = "backtested with other settings"
 
 
 class TrustWarning(UserWarning):
@@ -73,14 +74,56 @@ class ForecastResult:
                              path=path)
 
 
-def _trust(backtest: BacktestResult | None, models, horizons) -> tuple[pd.DataFrame, list[str]]:
+def _settings_differ(backtest: BacktestResult, model: str, horizon: int,
+                     settings: dict) -> str | None:
+    """Why the backtest's verdict for `model` does not carry over to this forecast, if so."""
+    meta = backtest.meta
+    base = (meta.get("base_configs") or {}).get(model)
+    if base is not None and base != settings["configs"].get(model):
+        changed = sorted(k for k in set(base) | set(settings["configs"][model])
+                         if base.get(k) != settings["configs"][model].get(k))
+        return f"its settings differ from the backtest's ({', '.join(changed)})"
+    if model in settings["learned"] and bool(meta.get("tuned")) != settings["tuned"]:
+        return ("the backtest tuned its settings and this forecast does not" if meta.get("tuned")
+                else "this forecast tunes its settings and the backtest did not")
+    if model == "pretrained":
+        if meta.get("zero_shot") is not None and meta["zero_shot"] != settings["zero_shot"]:
+            return ("the backtest applied it without training and this forecast trains it"
+                    if meta["zero_shot"] else
+                    "the backtest trained it and this forecast applies it without training")
+        theirs = (meta.get("init_digest") or {}).get(str(horizon))
+        ours = (settings.get("init_digest") or {}).get(horizon)
+        if theirs is not None and theirs != ours:
+            return "the backtest started from a different saved model"
+    return None
+
+
+def _trust(backtest: BacktestResult | None, models, horizons,
+           settings: dict | None = None) -> tuple[pd.DataFrame, list[str]]:
+    """Per model and horizon, the backtest's verdict, or why there is none.
+
+    `settings` (this forecast's configs, tuning and pretrained source) is checked
+    against what the backtest ran; a verdict for other settings doesn't carry over.
+    """
     rows, notes = [], []
     if backtest is None:
         notes.append("No backtest found for this city. These forecasts have not been checked "
                      "against persistence on your data; run areafluforecast.backtest(city) first.")
+    elif backtest.meta.get("unverified"):
+        notes.append(f"The backtest used ({backtest.path}) was saved by an older version and "
+                     "cannot be checked against this data or these settings; run "
+                     "areafluforecast.backtest(city) again.")
+    check = settings is not None and backtest is not None and "base_configs" in backtest.meta
     for model in models:
         for horizon in horizons:
             verdict = backtest.verdict(model, horizon) if backtest is not None else None
+            reason = _settings_differ(backtest, model, horizon, settings) if (
+                check and verdict is not None) else None
+            if reason:
+                rows.append({"model": model, "horizon": horizon, "trust": OTHER_SETTINGS})
+                notes.append(f"{model} at {horizon} weeks ahead: the backtest's verdict does "
+                             f"not apply, because {reason}.")
+                continue
             rows.append({"model": model, "horizon": horizon, "trust": verdict or NO_BACKTEST})
             if backtest is not None and verdict is None:
                 notes.append(f"{model} was not backtested at {horizon} weeks ahead.")
@@ -93,28 +136,30 @@ def _trust(backtest: BacktestResult | None, models, horizons) -> tuple[pd.DataFr
 def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
              configs: dict | None = None, tune: bool = False,
              backtest: BacktestResult | str | Path | None = "latest",
-             init_from: str | Path | None = None, zero_shot: bool = False,
+             init_from: str | Path | dict | None = None, zero_shot: bool = False,
              out_dir: str | Path | None = DEFAULT_RUN_DIR, save_models: bool = False,
              progress: bool = True, device: str | None = None) -> ForecastResult:
     """Forecast 1..max(horizons) weeks past the last observed week.
 
-    backtest   "latest" looks up the newest saved backtest for this city; pass a
+    backtest   "latest" looks up the newest saved backtest of this city's data in
+               out_dir (nothing is looked up when out_dir is None); pass a
                BacktestResult or a saved backtest folder; None skips the check.
     init_from  a saved checkpoint to start the graph model from (transfer from a
-               city with more history). zero_shot=True applies it without training.
+               city with more history): one file for a single horizon, or
+               {horizon: file}. zero_shot=True applies it without training.
     """
     configs = configs or {}
     resolved = {}
     for model in models:
         config = resolve(model, configs.get(model if isinstance(model, str) else model.kind))
         resolved[config.kind] = config
-    init_members = None
+    horizons = tuple(sorted(int(h) for h in horizons))
+    init = None
     if init_from is not None:
-        loaded_config, init_members, _ = load_checkpoint(init_from)
+        init = load_init(init_from, horizons)
         # Labelled "pretrained", as backtest() labels it, so the trust check
         # matches this forecast to the pretrained model's own backtest verdict.
-        resolved["pretrained"] = resolve(loaded_config, configs.get("pretrained"))
-    horizons = tuple(sorted(int(h) for h in horizons))
+        resolved["pretrained"] = resolve(init.config, configs.get("pretrained"))
 
     last = city.rates.index.max()
     if city.rates.loc[last].isna().all():
@@ -136,10 +181,11 @@ def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
             if tune and is_learned(config) and name != "pretrained":
                 use, _ = tune_config(city, config, horizon=horizon, test_start=future[0],
                                      test_end=future[-1], rates=extended, on_unit=bar.step)
-            pretrained = name == "pretrained"
+            pretrained = init is not None and name == "pretrained"
             output = run_model(city, use, horizon=horizon, test_start=future[0], test_end=future[-1],
                                rates=extended, only_origin=origin,
-                               init_members=init_members if pretrained else None,
+                               init_members=init.members[horizon] if pretrained else None,
+                               init_features=init.feature_names[horizon] if pretrained else None,
                                zero_shot=zero_shot and pretrained,
                                on_unit=lambda m, h=horizon: bar.step(f"{h}wk {m}"), device=device)
             frames.append(output.test.assign(model=name))
@@ -149,11 +195,16 @@ def forecast(city: City, models=DEFAULT_MODELS, *, horizons=(1, 2, 3, 4),
                                                  output, city_name=city.name, areas=city.areas)))
 
     table = pd.concat(frames, ignore_index=True).drop(columns=["actual"])
-    if backtest == "latest":
-        backtest = latest_backtest(city, out_dir or DEFAULT_RUN_DIR)
+    if isinstance(backtest, str) and backtest == "latest":
+        backtest = latest_backtest(city, out_dir) if out_dir is not None else None
     elif isinstance(backtest, (str, Path)):
         backtest = BacktestResult.load(backtest)
-    trust, notes = _trust(backtest, list(resolved), horizons)
+    settings = {"configs": {name: to_json(c) for name, c in resolved.items()},
+                "learned": {name for name, c in resolved.items()
+                            if is_learned(c) and name != "pretrained"},
+                "tuned": bool(tune), "zero_shot": bool(zero_shot),
+                "init_digest": init.digests if init is not None else None}
+    trust, notes = _trust(backtest, list(resolved), horizons, settings)
     table = table.merge(trust, on=["model", "horizon"], how="left")
     for note in notes:
         warnings.warn(note, TrustWarning, stacklevel=2)

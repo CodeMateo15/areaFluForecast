@@ -107,9 +107,10 @@ fc.to_flusight()              # FluSight hub layout
 fc.plot("gnn_st")
 ```
 
-`forecast()` reads the most recent backtest for the city. It adds a `trust`
+`forecast()` reads the most recent backtest of the same data. It adds a `trust`
 column and raises a `TrustWarning` for any model or horizon that did not
-clearly beat persistence, or was never backtested.
+clearly beat persistence, was never backtested, or was backtested with other
+settings.
 
 How to read the backtest report:
 - **WIS** (weighted interval score) asks how good the whole forecast was, the

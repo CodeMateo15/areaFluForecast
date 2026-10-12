@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "areaFluForecast"
-version = "0.1.1"
+version = "0.2.0"
 description = "Neighborhood-scale influenza forecasts for public health departments: a graph neural network, a tuned LSTM and Cola-GNN, each checked against persistence on your own data."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -85,16 +85,47 @@ def test_zero_shot_from_checkpoint(city, tmp_path):
     assert again.table["predicted"].notna().all()
 
 
-def test_backtest_pretrained(city, tmp_path):
+@pytest.fixture(scope="module")
+def checkpoints(city, tmp_path_factory):
+    """One saved transferable model per horizon, 1 and 2 weeks ahead."""
     config = af.resolve("gnn_st_noadapt", {"n_seeds": 1, "epochs": 2, "mc_samples": 4})
-    first = af.forecast(city, models=[config], horizons=(1,), out_dir=tmp_path, progress=False,
-                        save_models=True, backtest=None)
-    bt = af.backtest(city, models=[], seasons=[2024], horizons=(1,),
-                     init_from=first.meta["saved_models"][0], out_dir=tmp_path, progress=False)
+    first = af.forecast(city, models=[config], horizons=(1, 2), progress=False, save_models=True,
+                        out_dir=tmp_path_factory.mktemp("ckpt"), backtest=None)
+    return {int(p[-4]): p for p in first.meta["saved_models"]}
+
+
+def test_backtest_pretrained(city, tmp_path, checkpoints):
+    bt = af.backtest(city, models=[], seasons=[2024], horizons=(1, 2), init_from=checkpoints,
+                     out_dir=tmp_path, progress=False)
     assert "pretrained" in set(bt.comparison["model"])
-    fc = af.forecast(city, models=[], horizons=(1,), init_from=first.meta["saved_models"][0],
-                     zero_shot=True, backtest=bt, out_dir=tmp_path, progress=False)
-    assert set(fc.table["trust"]) == {bt.verdict("pretrained", 1)}
+    fc = af.forecast(city, models=[], horizons=(1, 2), init_from=checkpoints, zero_shot=True,
+                     out_dir=tmp_path, progress=False)
+    assert fc.table.groupby("horizon")["trust"].first().to_dict() == {
+        h: bt.verdict("pretrained", h) for h in (1, 2)}
+    # The backtest applied the weights untrained, so it says nothing about fine-tuning them.
+    with pytest.warns(af.TrustWarning, match="applied it without training"):
+        tuned = af.forecast(city, models=[], horizons=(1,), init_from={1: checkpoints[1]},
+                            out_dir=tmp_path, progress=False)
+    assert set(tuned.table["trust"]) == {"backtested with other settings"}
+
+
+def test_one_horizon_checkpoint_is_not_reused(city, checkpoints):
+    with pytest.raises(ValueError, match="trained to forecast 1 weeks ahead, not 2"):
+        af.forecast(city, models=[], horizons=(1, 2), init_from=checkpoints[1], zero_shot=True,
+                    out_dir=None, progress=False, backtest=None)
+
+
+def test_pretrained_inputs_must_match(city, checkpoints):
+    with pytest.raises(ValueError, match="different input features"):
+        af.forecast(city, models=[], horizons=(1,), init_from=checkpoints[1], zero_shot=True,
+                    configs={"pretrained": {"use_weather": False}}, out_dir=None,
+                    progress=False, backtest=None)
+
+
+def test_no_out_dir_looks_nothing_up(city, monkeypatch, runs, backtest):
+    monkeypatch.chdir(runs.parent)
+    with pytest.warns(af.TrustWarning, match="No backtest"):
+        af.forecast(city, models=["persistence"], horizons=(1,), out_dir=None, progress=False)
 
 
 def test_plot(city, runs, backtest, tmp_path):
