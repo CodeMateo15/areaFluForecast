@@ -15,3 +15,12 @@ def test_citation_matches_the_version():
 
 def test_changelog_has_an_entry_for_the_version():
     assert f"## [{af.__version__}]" in (ROOT / "CHANGELOG.md").read_text()
+
+
+def test_release_dates_agree():
+    """Once the changelog dates this version, CITATION.cff carries the same date."""
+    heading = re.search(rf"^## \[{re.escape(af.__version__)}\] - (\S+)$",
+                        (ROOT / "CHANGELOG.md").read_text(), re.M)
+    if heading and heading.group(1) != "unreleased":
+        citation = (ROOT / "CITATION.cff").read_text()
+        assert f'date-released: "{heading.group(1)}"' in citation

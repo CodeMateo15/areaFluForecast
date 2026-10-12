@@ -199,6 +199,9 @@ forecasts are identical, down to the last bit for training.
   Department of Public Health's "Influenza Risk Level by ZIP Code" on the City of
   Chicago Data Portal. It is a 1-10 activity level, not a rate; its README carries
   the portal's required disclaimer.
+- **Pretrained Boston models** (`af.pretrained("boston")`) hold only model
+  weights, trained on Boston Public Health Commission weekly neighborhood data.
+  No case or visit data are in them.
 - **Nothing else is bundled.** The package contains no data from any other
   health department.
 - **Paper data.** The Columbus data used in the accompanying paper are
@@ -216,4 +219,7 @@ forecasts are identical, down to the last bit for training.
 
 ## Citing
 
-See `CITATION.cff`.
+Please cite the version you used. The citation details are in
+[`CITATION.cff`](https://github.com/CodeMateo15/areaFluForecast/blob/main/CITATION.cff),
+and GitHub's **Cite this repository** button formats them as APA or BibTeX.
+Each release is archived on [Zenodo](https://zenodo.org/), which gives it a DOI.

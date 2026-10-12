@@ -2,17 +2,27 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "areaFluForecast: neighborhood-scale influenza forecasting for public health departments"
 type: software
+abstract: >-
+  A Python package that gives public health departments 1-4 week influenza
+  forecasts for neighborhoods, ZIP codes or districts from their own weekly
+  rates and area boundaries. It trains a spatio-temporal graph neural network,
+  a tuned LSTM and Cola-GNN, checks each against persistence on the
+  department's own past seasons before reporting forecasts, and gives
+  calibrated FluSight-style quantiles. Pretrained Boston models support cities
+  with short histories.
 authors:
   - family-names: Biggs
     given-names: Mateo
     email: biggs.m@northeastern.edu
     affiliation: Northeastern University
-version: 1.0.0rc1
+version: 1.0.0
+date-released: "2026-10-12"
 license: MIT
 repository-code: "https://github.com/CodeMateo15/areaFluForecast"
-# doi: add the Zenodo DOI after the first release
+url: "https://areafluforecast.readthedocs.io"
 keywords:
   - influenza
   - forecasting
   - graph neural network
   - public health
+  - epidemiology

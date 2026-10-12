@@ -1,30 +1,62 @@
 name: release
 
-# Push a tag like v1.0.0 (or v1.0.0rc1) to release. See RELEASING.md.
+# Releases happen by bumping the version. On every push to main this checks
+# __version__: if no tag v<version> exists yet and CHANGELOG.md gives that
+# version a date (not "unreleased"), it builds, tests the wheel, publishes to
+# PyPI, then tags the commit v<version> and creates the GitHub release, which
+# Zenodo archives. Otherwise it does nothing. See RELEASING.md.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # all tags, to see whether this version is out
+      - name: Is this a new, dated version?
+        id: check
+        run: |
+          version=$(python3 -c "import ast, pathlib; tree = ast.parse(pathlib.Path('src/areafluforecast/__init__.py').read_text()); print(next(n.value.value for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', '') == '__version__'))")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already released; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          heading=$(grep -m1 "^## \[$version\]" CHANGELOG.md || true)
+          if [ -z "$heading" ] || echo "$heading" | grep -qi "unreleased"; then
+            echo "::notice::$version is not dated in CHANGELOG.md, so it is not released yet."
+            echo "release=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          grep -q "^version: $version$" CITATION.cff || {
+            echo "::error::CITATION.cff is not at version $version"; exit 1; }
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          if echo "$version" | grep -qE '(a|b|rc)[0-9]+$'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: The tag must match the package version
-        id: version
-        run: |
-          version=$(python -c "import ast, pathlib; tree = ast.parse(pathlib.Path('src/areafluforecast/__init__.py').read_text()); print(next(n.value.value for n in tree.body if isinstance(n, ast.Assign) and n.targets[0].id == '__version__'))")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match __version__ $version"; exit 1
-          fi
-          grep -q "^version: $version$" CITATION.cff || { echo "CITATION.cff is not at $version"; exit 1; }
-          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no $version entry"; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build
         run: |
           pip install build twine
@@ -63,13 +95,12 @@ jobs:
           pytest -q -p no:cacheprovider "$GITHUB_WORKSPACE/tests" -m "not network and not research"
 
   publish:
-    needs: [build, test-wheel]
+    needs: [check, test-wheel]
     runs-on: ubuntu-latest
-    # PyPI trusted publishing: no token is stored anywhere. The "pypi"
-    # environment and the PyPI side are set up once (RELEASING.md).
+    # PyPI trusted publishing: no token is stored anywhere (RELEASING.md).
     environment:
       name: pypi
-      url: https://pypi.org/project/areaFluForecast/${{ needs.build.outputs.version }}/
+      url: https://pypi.org/project/areaFluForecast/${{ needs.check.outputs.version }}/
     permissions:
       id-token: write
     steps:
@@ -79,9 +110,10 @@ jobs:
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
-  github-release:
-    # Publishing the GitHub release is what Zenodo archives (and mints a DOI for).
-    needs: [build, publish]
+  tag-and-release:
+    # Creating the release also creates the tag v<version> on this commit.
+    # Zenodo archives the published release and mints a DOI for it.
+    needs: [check, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -93,18 +125,18 @@ jobs:
           path: dist/
       - name: Release notes from the changelog
         run: |
-          python - "${{ needs.build.outputs.version }}" > notes.md <<'EOF'
+          python3 - "${{ needs.check.outputs.version }}" > notes.md <<'EOF'
           import re, sys
           text = open("CHANGELOG.md").read()
           match = re.search(rf"^## \[{re.escape(sys.argv[1])}\].*?\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
           print(match.group(1).strip())
           EOF
-      - name: Create the release
+      - name: Tag v${{ needs.check.outputs.version }} and create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${{ needs.build.outputs.version }}"
+          version="${{ needs.check.outputs.version }}"
           flags=""
-          if echo "$version" | grep -qE '(a|b|rc)[0-9]+$'; then flags="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" dist/* --title "areaFluForecast $version" \
-            --notes-file notes.md $flags
+          if [ "${{ needs.check.outputs.prerelease }}" = "true" ]; then flags="--prerelease"; fi
+          gh release create "v$version" dist/* --target "$GITHUB_SHA" \
+            --title "areaFluForecast $version" --notes-file notes.md $flags

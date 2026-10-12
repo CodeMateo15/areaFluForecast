@@ -17,6 +17,8 @@ policy; the submodules adjacency, scoring, timing and weather are public too.
 Anything else may change without notice.
 """
 
+import warnings as _warnings
+
 from . import adjacency, scoring, timing, weather
 from .backtest import BacktestResult, backtest, combine, latest_backtest
 from .checkpoint import Checkpoint, pretrained
@@ -26,7 +28,7 @@ from .datasets import load_city, load_sample, save_city
 from .errors import DataError, DataWarning, TrustWarning
 from .forecast import ForecastResult, forecast
 
-__version__ = "1.0.0rc1"
+__version__ = "1.0.0"
 
 __all__ = ["City", "load_sample", "load_city", "save_city", "rates_from_counts", "read_rates_csv",
            "backtest", "BacktestResult", "latest_backtest", "combine",
@@ -36,3 +38,18 @@ __all__ = ["City", "load_sample", "load_city", "save_city", "rates_from_counts",
            "PRESETS", "resolve",
            "DataError", "DataWarning", "TrustWarning",
            "adjacency", "scoring", "timing", "weather", "__version__"]
+
+# Kept from 0.1 so existing code keeps working; they warn, and go in 2.0.
+_DEPRECATED = {
+    "save_checkpoint": "use Checkpoint(...).save(path), or forecast(..., save_models=True)",
+    "load_checkpoint": "use Checkpoint.load(path)",
+}
+
+
+def __getattr__(name: str):
+    if name in _DEPRECATED:
+        _warnings.warn(f"areafluforecast.{name} is deprecated and will be removed in 2.0: "
+                       f"{_DEPRECATED[name]}.", DeprecationWarning, stacklevel=2)
+        from . import checkpoint
+        return getattr(checkpoint, name)
+    raise AttributeError(f"module 'areafluforecast' has no attribute {name!r}")
