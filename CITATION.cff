@@ -18,6 +18,8 @@ authors:
 version: 1.0.0
 date-released: "2026-10-12"
 license: MIT
+# The concept DOI: resolves to the latest version on Zenodo.
+doi: 10.5281/zenodo.23327109
 repository-code: "https://github.com/CodeMateo15/areaFluForecast"
 url: "https://areafluforecast.readthedocs.io"
 keywords:

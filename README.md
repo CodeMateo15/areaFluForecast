@@ -1,225 +1,166 @@
 # areaFluForecast
 
-**Documentation: https://areafluforecast.readthedocs.io** · **PyPI: https://pypi.org/project/areaFluForecast/**
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.23327109-3B97DB.svg)](https://doi.org/10.5281/zenodo.23327109)
+[![PyPI](https://img.shields.io/pypi/v/areaFluForecast.svg)](https://pypi.org/project/areaFluForecast/)
+[![tests](https://github.com/CodeMateo15/areaFluForecast/actions/workflows/ci.yml/badge.svg)](https://github.com/CodeMateo15/areaFluForecast/actions/workflows/ci.yml)
 
-Neighborhood-scale influenza forecasts, 1 to 4 weeks ahead, for public health
-departments. You bring weekly flu rates for your areas (neighborhoods, ZIP-code
-groups, districts) and their boundaries. The package trains three models, checks
-each against the simplest possible forecast on your own past seasons, and only
-then gives you forecasts, with honest uncertainty bands.
+**areaFluForecast** is an open-source Python package that gives public health
+departments 1–4 week influenza forecasts for their neighborhoods, ZIP codes or
+districts. You bring weekly flu rates and area boundaries. It trains three
+models, checks each against persistence ("next week looks like this week") on
+your own past seasons, and gives forecasts with calibrated uncertainty bands
+and a trust label for each model.
 
-The three models:
-- **`gnn_st`**: a graph neural network that uses which areas border each other
-  and whose flu curves move together. This is the model from the accompanying paper.
-- **`lstm`**: a recurrent network that sees every area's series but no map.
-- **`colagnn`**: Cola-GNN (Deng et al. 2020), a published graph model for flu.
-  This is our reimplementation from the paper, not the authors' code.
+In Boston, the graph model's error was 18–28% below persistence on seasons it
+never saw. In Columbus it was 12–23% below on average, but not clearly. The
+backtest tells you which kind of city yours is.
 
-Every model is compared with **persistence**, "next week looks like this week".
-A forecaster that can't beat that on your data has learned nothing you can use.
-The package tells you, for each model and horizon, whether it did.
+---
 
-> **What the evidence says.** In Boston the graph model's error was 18–28% below
-> persistence on seasons it never saw. It tied a carefully tuned LSTM at 1 week
-> and led it on average at 2–4 weeks. In Columbus, with only one unseen season,
-> its error was 12–23% below persistence on average, but that lead was not
-> statistically clear. Your city may be either, and the backtest is how you
-> find out.
+## Documentation
+
+Documentation: [areafluforecast.readthedocs.io](https://areafluforecast.readthedocs.io)
+
+PyPI: [areaFluForecast](https://pypi.org/project/areaFluForecast/)
+
+Data sources and credits: [Data and credits](https://areafluforecast.readthedocs.io/en/latest/data-and-credits/)
+
+---
 
 ## Install
 
 ```bash
-pip install areaFluForecast
-pip install "areaFluForecast[plot]"    # adds plotting
+pip install areaFluForecast             # everything except plots
+pip install "areaFluForecast[plot]"     # + forecast plots
+pip install "areaFluForecast[geo]"      # + messy boundary files (shapely)
 ```
 
-Python 3.10+, CPU only. Installing the package also installs PyTorch and
-PyTorch Geometric.
+Requires Python 3.10 or later. Runs on a laptop CPU; no GPU needed.
 
-## Try it on Boston
+---
+
+## A tour
 
 ```python
 import areafluforecast as af
 
-city = af.load_sample("boston")
+# Your data: weekly rates per area, plus a boundary file
+city = af.City.from_files("rates.csv", areas="areas.geojson", id_col="NAME")
+city.fetch_weather()                 # optional; Open-Meteo, no API key
 print(city.summary())
-bt = af.backtest(city, seasons=1, horizons=(1, 2), configs={"gnn_st": {"n_seeds": 3}})
-fc = af.forecast(city, horizons=(1, 2))
-fc.summary()
-```
 
-Or from the shell: `areaflu backtest --sample boston --seasons 1 --quick`.
+# Would the models have worked here? Score past seasons against persistence
+bt = af.backtest(city)
+bt.report()
 
-**Worked examples:** [`examples/`](https://github.com/CodeMateo15/areaFluForecast/tree/HEAD/examples) has five notebooks, saved with
-their outputs:
-- a Boston quickstart
-- bringing your own files
-- a city with only two years of data
-- reading the results and choosing a model
-- a real city (Chicago) built from public open data
-
-## Use your own data
-
-You need two things.
-
-**1. Weekly rates**, as a CSV. Either long format:
-
-| week | area | rate |
-|---|---|---|
-| 2024-01-07 | Riverside | 41.2 |
-| 2024-01-07 | Old Town | 28.9 |
-
-or wide format, with one column per area and the week start date first. Rates
-per 100,000 residents are expected. Leave missing or suppressed weeks blank.
-Don't fill them with 0. You need at least two years of data, and three or more
-is better. If you have counts, `af.rates_from_counts(counts, population)`
-converts them.
-
-**2. The map**, given one of two ways:
-- a GeoJSON boundary file whose features carry the area name (`id_col`). The
-  package works out which areas share a border.
-- or a CSV edge list with one row per pair of bordering areas.
-
-```python
-city = af.City.from_files("rates.csv", areas="areas.geojson", id_col="NAME",
-                          flu_months=(10, 11, 12, 1, 2, 3))
-city.fetch_weather()          # optional: Open-Meteo, free, no API key
-print(city.summary())         # check this before training
-```
-
-Southern-Hemisphere cities pass their own flu months, e.g. `(4, 5, 6, 7, 8, 9)`.
-
-**Optional inputs:**
-- **Anchors** are neighbouring towns or water that border your areas but have
-  no data. List them in `anchors=[...]`, and the edge list or boundary file
-  supplies their borders.
-- **Static area characteristics** (a CSV with an `area` column). They are off
-  by default, because in the paper they did not help.
-
-## The workflow
-
-```python
-bt = af.backtest(city)        # would it have worked here? (last 2 complete seasons)
-bt.report()                   # each model vs persistence, per horizon
-fc = af.forecast(city)        # weeks 1-4 after your last observed week
-fc.to_csv("forecast.csv")     # median, 95% band, 23 FluSight quantiles per area
-fc.to_flusight()              # FluSight hub layout
+# Forecast the next 1-4 weeks, with a trust label from that backtest
+fc = af.forecast(city)
+fc.to_csv("forecast.csv")            # median, 95% band, 23 FluSight quantiles
 fc.plot("gnn_st")
-```
 
-`forecast()` reads the most recent backtest of the same data. It adds a `trust`
-column and raises a `TrustWarning` for any model or horizon that did not
-clearly beat persistence, was never backtested, or was backtested with other
-settings.
-
-How to read the backtest report:
-- **WIS** (weighted interval score) asks how good the whole forecast was, the
-  band as well as the point. Lower is better, and it's in rate units. CDC's
-  FluSight ranks forecasts by it.
-- **Relative WIS** is the model's WIS divided by persistence's, on the same
-  weeks. Below 1 means the model beat persistence.
-- **p (Holm)** asks whether the weekly gap could be week-to-week noise. It is
-  tested over weeks, not area-weeks, because neighbouring areas move together,
-  and it is corrected for the number of comparisons. "Better than persistence"
-  means a relative WIS below 1 and p below 0.05.
-- **Coverage** is how often the truth fell inside the 95% band. It should be
-  near 95%.
-
-## How long it takes
-
-On a laptop CPU, for about 15 areas and 8 years of weekly data:
-- One graph-model ensemble member takes about 3 minutes, so the default
-  10-member ensemble takes about 30 minutes per horizon.
-- The LSTM and Cola-GNN take a few minutes per horizon.
-- A default backtest (2 seasons × 4 horizons) takes about 4–5 hours.
-- A forecast takes about 2–3 hours.
-
-To go faster, use `configs={"gnn_st": {"n_seeds": 3}}`, fewer horizons, or
-`--quick` to check the pipeline end to end. Everything is single-threaded, so
-separate horizons or cities can run in parallel. `tune=True` picks each model's
-settings from 12 candidates on validation weeks, the way the paper did, and
-takes about 12× longer.
-
-## Starting from Boston's model
-
-A department with only a season or two of data can start from a model trained
-elsewhere:
-
-```python
-weights = af.pretrained("boston")          # bundled: one model per horizon, 1-4 weeks
-bt = af.backtest(city, models=["gnn_st_noadapt"], init_from=weights, zero_shot=True)
+# Short history? Start from the bundled Boston models
+weights = af.pretrained("boston")
 fc = af.forecast(city, init_from=weights, zero_shot=True)
 ```
 
-Or from the shell: `areaflu backtest --city city.json --weather --pretrained boston --zero-shot`.
+Or from the shell:
 
-In the paper, a Boston model applied to Columbus with no Columbus training tied
-a model trained on Columbus itself and beat persistence. The reverse direction
-(Columbus to Boston, with a third of the history) was worse at 2 and 4 weeks.
+```bash
+areaflu check    --rates rates.csv --areas areas.geojson --id-col NAME
+areaflu backtest --rates rates.csv --areas areas.geojson --id-col NAME --weather
+areaflu forecast --rates rates.csv --areas areas.geojson --id-col NAME --weather
+areaflu backtest --sample boston --seasons 1 --quick      # try it on bundled data
+```
 
-Limits:
-- **The inputs must match.** The pretrained model uses weather and no static
-  characteristics, so call `city.fetch_weather()` first.
-- **Backtest it on your data before trusting it.** Applied untrained to
-  Columbus, the bundled Boston models were clearly better than persistence only
-  at 1 week. The forecast's trust label comes from that backtest.
+---
 
-## Limits to know
+## What's in it
 
-- **The forecasts run late.** Every model here, like persistence, rises after
-  the curve rises and peaks after it peaks. It runs about *h* weeks behind at
-  *h* weeks ahead. The models beat persistence by getting the size of the
-  epidemic right, not by seeing turns earlier. This happens because the models
-  only see past rates, and a turn isn't visible in weekly data until after it
-  happens. A growth-rate feature and a median loss were tested and didn't
-  change it. The backtest report has a **timing** section that measures this
-  on your data. Earlier warning would need inputs that move before ED visits
-  do, such as wastewater or a shorter reporting delay.
-- **Reporting delays are not simulated.** A 1-week forecast assumes last week's
-  data is complete. If your data arrives L weeks late, treat the h-week forecast
-  as roughly an (h + L)-week one.
-- **The backtest scores the models, not your data pipeline.** If your counts get
-  revised after the fact, the backtest saw final numbers and your real-time
-  forecasts will not.
-- **One season is one season.** Two or more backtest seasons are better than one.
+| Model | What it is |
+| --- | --- |
+| `gnn_st` | Graph neural network over bordering areas and correlated curves; the model from the accompanying paper |
+| `lstm` | Multivariate LSTM: every area's series, no map |
+| `colagnn` | Cola-GNN (Deng et al. 2020), reimplemented from the paper |
+| `persistence`, `seasonal_naive` | Baselines every model is compared with |
+| `af.pretrained("boston")` | Transferable graph models trained on Boston, one per horizon |
+
+| Bundled data | Coverage |
+| --- | --- |
+| Boston sample | 14 neighborhoods, weekly, 2017–2026, with weather |
+| Chicago sample | 58 ZIP codes, weekly activity level (1–10), 2019–2026, with weather |
+
+---
+
+## Modules
+
+### City and data
+`City.from_files`, `City.from_frames`, `load_sample`, `load_city`, `save_city`,
+`rates_from_counts`, `read_rates_csv`
+
+### Backtest and forecast
+`backtest`, `BacktestResult`, `latest_backtest`, `combine`, `forecast`,
+`ForecastResult`
+
+Every forecast carries a `trust` label per model and horizon, such as "better
+than persistence" or "not backtested". Anything short of "better" raises a
+`TrustWarning`.
+
+### Models and settings
+`GNNConfig`, `LSTMConfig`, `ColaGNNConfig`, `BaselineConfig`, `PRESETS`,
+`resolve`, `Checkpoint`, `pretrained`
+
+### Scores, timing, maps, weather
+`af.scoring` (WIS, interval score, PIT, Diebold-Mariano), `af.timing` (weeks
+behind the curve, peak offsets), `af.adjacency` (borders from GeoJSON),
+`af.weather` (Open-Meteo)
+
+---
+
+## Limits
+
+- **Forecasts run late.** Like persistence, every model runs about *h* weeks
+  behind the curve at *h* weeks ahead. The models win on the size of the
+  epidemic, not on its timing. The backtest report measures this on your
+  data.
+- **Reporting delays aren't simulated.** If your data arrives *L* weeks late,
+  treat an *h*-week forecast as an (*h* + *L*)-week one.
+- **The backtest sees final data.** Revised counts make past accuracy look
+  better than real time will be.
+
+More in [Limits to know](https://areafluforecast.readthedocs.io/en/latest/limits/).
+
+---
+
+## Examples
+
+Five notebooks, saved with their outputs, are in [`examples/`](https://github.com/CodeMateo15/areaFluForecast/tree/main/examples):
+a Boston quickstart, bringing your own files, a city with two years of data,
+reading the results, and a real city (Chicago) from public open data.
 
 ## Reproducing the paper
 
-`scripts/parity/` reruns the paper's tuned Boston backtest with this package and
-compares the forecasts week by week. `tests/test_research_parity.py` checks,
-against the research code, that the inputs, graph, initial weights and trained
-forecasts are identical, down to the last bit for training.
+`scripts/parity/` reruns the paper's Boston backtest with this package.
+`tests/test_research_parity.py` checks that the package matches the research
+code bit for bit. See [Reproducing the paper](https://areafluforecast.readthedocs.io/en/latest/reproducibility/).
 
-## Data availability and credits
-
-- **The bundled Boston sample** comes from the Boston Public Health Commission's
-  public dashboard.
-- **Weather data** is by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
-- **The bundled Chicago sample** (`load_sample("chicago")`) comes from the Chicago
-  Department of Public Health's "Influenza Risk Level by ZIP Code" on the City of
-  Chicago Data Portal. It is a 1-10 activity level, not a rate; its README carries
-  the portal's required disclaimer.
-- **Pretrained Boston models** (`af.pretrained("boston")`) hold only model
-  weights, trained on Boston Public Health Commission weekly neighborhood data.
-  No case or visit data are in them.
-- **Nothing else is bundled.** The package contains no data from any other
-  health department.
-- **Paper data.** The Columbus data used in the accompanying paper are
-  described in its data availability statement. Columbus weekly
-  area-level counts are public in the
-  [research repository](https://github.com/CodeMateo15/GNN-Influenza-Boston).
-  Columbus Public Health's visit-level extracts are available from them on
-  request.
-- **Your data stays with you.** The package sends nothing anywhere. Its only
-  network call is the optional weather fetch, which sends area centroids to
-  Open-Meteo.
-- This work was supported by Boston Public Health Commission, Columbus Public
-  Health, the PEAK Trailblazer fellowship, and Prof. Ariel Hamlin (Northeastern
-  University).
+---
 
 ## Citing
 
-Please cite the version you used. The citation details are in
-[`CITATION.cff`](https://github.com/CodeMateo15/areaFluForecast/blob/main/CITATION.cff),
-and GitHub's **Cite this repository** button formats them as APA or BibTeX.
-Each release is archived on [Zenodo](https://zenodo.org/), which gives it a DOI.
+Cite the version you used:
+[10.5281/zenodo.23327109](https://doi.org/10.5281/zenodo.23327109) always
+resolves to the latest version. Details are in [`CITATION.cff`](https://github.com/CodeMateo15/areaFluForecast/blob/main/CITATION.cff),
+or use GitHub's **Cite this repository** button.
+
+Found a bug or want a feature? Open an [issue](https://github.com/CodeMateo15/areaFluForecast/issues).
+
+## Credits
+
+Supported by the Boston Public Health Commission, Columbus Public Health, the
+PEAK Trailblazer fellowship, and Prof. Ariel Hamlin (Northeastern University).
+Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0). Your
+data stays with you: the only network call is the optional weather fetch.
+
+## Contact
+
+Mateo Biggs, biggs.m@northeastern.edu
