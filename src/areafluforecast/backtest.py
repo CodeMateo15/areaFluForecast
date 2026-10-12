@@ -8,6 +8,7 @@ reporting delays; see the README). Every model is compared with persistence
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -91,7 +92,8 @@ class BacktestResult:
         self.predictions.to_csv(path / "predictions.csv", index=False)
         self.comparison.to_csv(path / "comparison.csv", index=False)
         self.scores.to_csv(path / "scores.csv", index=False)
-        self.timing.to_csv(path / "timing.csv", index=False)
+        if not self.timing.empty:
+            self.timing.to_csv(path / "timing.csv", index=False)
         if self.tuning:
             pd.DataFrame(self.tuning).to_csv(path / "tuning.csv", index=False)
         (path / "report.md").write_text(self.report(show=False) + "\n")
@@ -130,9 +132,20 @@ def _seasons(city: City, seasons) -> list[int]:
     return chosen
 
 
+def data_fingerprint(city: City, end) -> str:
+    """Hash of the areas and every weekly rate up to `end`, to match a backtest to its data."""
+    areas = sorted(city.areas)
+    rates = city.rates.loc[:pd.Timestamp(end), areas]
+    values = np.nan_to_num(np.round(rates.to_numpy(dtype=float), 6), nan=-1.0) + 0.0
+    digest = hashlib.sha256(json.dumps(areas).encode())
+    digest.update(",".join(rates.index.strftime("%Y-%m-%d")).encode())
+    digest.update(np.ascontiguousarray(values).tobytes())
+    return digest.hexdigest()
+
+
 def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2, 3, 4),
              configs: dict | None = None, tune: bool = False, out_dir: str | Path | None = DEFAULT_RUN_DIR,
-             init_from: str | Path | None = None, zero_shot: bool = True,
+             init_from: str | Path | dict | None = None, zero_shot: bool = True,
              progress: bool = True, device: str | None = None) -> BacktestResult:
     """Train on the weeks before each past season and forecast that season.
 
@@ -144,22 +157,22 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
     tune     pick each learned model's settings per season from 12 candidates on
              validation weeks (12x the training time), as the paper did.
     init_from  a saved graph-model checkpoint (e.g. one trained in another city) to
-             backtest alongside the other models, as "pretrained". zero_shot=True
-             applies it with no training here; False fine-tunes it on each season's
-             training weeks.
+             backtest alongside the other models, as "pretrained": one file for a
+             single horizon, or {horizon: file}. zero_shot=True applies it with no
+             training here; False fine-tunes it on each season's training weeks.
     """
     configs = configs or {}
-    resolved, init_for = {}, {}
+    resolved = {}
     for model in [*models, *BASELINES]:
         config = resolve(model, configs.get(model if isinstance(model, str) else model.kind))
         resolved[config.kind] = config
-    if init_from is not None:
-        from .checkpoint import load_checkpoint
-        loaded, members, _ = load_checkpoint(init_from)
-        resolved["pretrained"] = resolve(loaded, configs.get("pretrained"))
-        init_for["pretrained"] = members
     years = _seasons(city, seasons)
     horizons = tuple(int(h) for h in horizons)
+    init = None
+    if init_from is not None:
+        from .checkpoint import load_init
+        init = load_init(init_from, horizons)
+        resolved["pretrained"] = resolve(init.config, configs.get("pretrained"))
 
     total = sum((units(c) + (tuning_units(c) if tune else 0)) for c in resolved.values())
     total *= len(years) * len(horizons)
@@ -174,14 +187,16 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
         for horizon in horizons:
             for name, config in resolved.items():
                 use = config
-                if tune and is_learned(config) and name not in init_for:
+                pretrained = init is not None and name == "pretrained"
+                if tune and is_learned(config) and not pretrained:
                     use, rows = tune_config(city, config, horizon=horizon, test_start=start,
                                             test_end=end, on_unit=bar.step)
                     tuning_rows += [{"season": label, "horizon": horizon, "model": name, **r}
                                     for r in rows]
                 output = run_model(city, use, horizon=horizon, test_start=start, test_end=end,
-                                   init_members=init_for.get(name),
-                                   zero_shot=zero_shot and name in init_for,
+                                   init_members=init.members[horizon] if pretrained else None,
+                                   init_features=init.feature_names[horizon] if pretrained else None,
+                                   zero_shot=zero_shot and pretrained,
                                    on_unit=lambda m, l=label, h=horizon: bar.step(f"{l} {h}wk {m}"),
                                    device=device)
                 frame = output.test.assign(model=name, season=label)
@@ -189,12 +204,19 @@ def backtest(city: City, models=DEFAULT_MODELS, *, seasons=None, horizons=(1, 2,
                 chosen[f"{name}|{label}|{horizon}"] = to_json(use)
 
     predictions = pd.concat(frames, ignore_index=True)
+    data_end = max(city.season_window(y)[1] for y in years)
     result = _summarize(
         city.name, predictions, configs=chosen, tuning=tuning_rows,
         meta={"seasons": years, "season_labels": [city.season_label(y) for y in years],
               "horizons": list(horizons), "models": list(resolved), "tuned": tune,
               "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-              "last_week": str(city.rates.index.max().date())})
+              "last_week": str(city.rates.index.max().date()),
+              "data_end": str(pd.Timestamp(data_end).date()),
+              "fingerprint": data_fingerprint(city, data_end),
+              "base_configs": {name: to_json(c) for name, c in resolved.items()},
+              "zero_shot": zero_shot if init is not None else None,
+              "init_digest": ({str(h): d for h, d in init.digests.items()}
+                              if init is not None else None)})
     if out_dir is not None:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         result.save(Path(out_dir) / city.name / f"backtest_{stamp}")
@@ -233,7 +255,15 @@ def combine(parts: list[BacktestResult]) -> BacktestResult:
     horizons = sorted({h for p in parts for h in p.meta.get("horizons", [])})
     models = list(dict.fromkeys(m for p in parts for m in p.meta.get("models", [])))
     configs = {k: v for p in parts for k, v in p.configs.items()}
-    meta = {**parts[0].meta, "seasons": seasons, "season_labels": labels,
+    # The part whose data reaches furthest vouches for the whole: its fingerprint
+    # covers the earlier parts' weeks too.
+    furthest = max(parts, key=lambda p: p.meta.get("data_end") or "")
+    base_configs = {k: v for p in parts for k, v in (p.meta.get("base_configs") or {}).items()}
+    digests = {k: v for p in parts for k, v in (p.meta.get("init_digest") or {}).items()}
+    meta = {**parts[0].meta, "data_end": furthest.meta.get("data_end"),
+            "fingerprint": furthest.meta.get("fingerprint"),
+            "base_configs": base_configs or None, "init_digest": digests or None,
+            "seasons": seasons, "season_labels": labels,
             "horizons": horizons, "models": models, "combined_from": len(parts),
             "created": time.strftime("%Y-%m-%dT%H:%M:%S")}
     predictions = pd.concat([p.predictions for p in parts], ignore_index=True)
@@ -242,6 +272,25 @@ def combine(parts: list[BacktestResult]) -> BacktestResult:
 
 
 def latest_backtest(city: City, out_dir: str | Path = DEFAULT_RUN_DIR) -> BacktestResult | None:
+    """The newest saved backtest of this city's data, or None.
+
+    A saved run matches only if it was made on the same areas and the same weekly
+    rates up to the end of its last season; weeks added since don't matter, so one
+    backtest keeps vouching for weekly forecasts until past data changes. Runs saved
+    by version 0.1, which carry no fingerprint, are used only when nothing matches,
+    and are marked meta["unverified"].
+    """
     root = Path(out_dir) / city.name
-    runs = sorted(root.glob("backtest_*/backtest.json")) if root.exists() else []
-    return BacktestResult.load(runs[-1].parent) if runs else None
+    runs = sorted(root.glob("backtest_*/backtest.json"), reverse=True) if root.exists() else []
+    legacy = None
+    for run in runs:
+        meta = json.loads(run.read_text())
+        if meta.get("fingerprint") is None or meta.get("data_end") is None:
+            legacy = legacy or run.parent
+        elif meta["fingerprint"] == data_fingerprint(city, meta["data_end"]):
+            return BacktestResult.load(run.parent)
+    if legacy is None:
+        return None
+    result = BacktestResult.load(legacy)
+    result.meta["unverified"] = True
+    return result

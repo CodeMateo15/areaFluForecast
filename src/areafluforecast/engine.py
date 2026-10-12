@@ -6,6 +6,7 @@ Everything above this (backtest, forecast, tune) is a loop over `run_model`.
 from __future__ import annotations
 
 import random
+import warnings
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
@@ -64,11 +65,14 @@ def make_split(index: pd.DatetimeIndex, window: Window, *, only_origin: int | No
 def run_model(city: City, config: ModelConfig, *, horizon: int, test_start, test_end,
               rates: pd.DataFrame | None = None, only_origin: int | None = None,
               init_members: list[dict] | None = None, zero_shot: bool = False,
+              init_features: list[str] | None = None,
               on_unit: UnitCallback = None, device: str | None = None) -> FitOutput:
     """Train `config` to forecast `horizon` weeks ahead and score [test_start, test_end].
 
     `rates` overrides the city's rates (forecasting passes them extended with
     empty future weeks). `only_origin` keeps a single scored origin.
+    `init_members` are saved weights to start from; `init_features` the input
+    feature names they were trained on, checked against this city's.
     """
     rates = city.rates if rates is None else rates
     window = make_window(config, horizon, test_start, test_end)
@@ -76,7 +80,7 @@ def run_model(city: City, config: ModelConfig, *, horizon: int, test_start, test
     torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
     if isinstance(config, GNNConfig):
         out = _run_gnn(city, config, rates, window, split, torch_device, init_members,
-                       zero_shot, on_unit)
+                       zero_shot, init_features, on_unit)
     elif isinstance(config, (LSTMConfig, ColaGNNConfig)):
         out = _run_sequence(city, config, rates, window, split, torch_device, on_unit)
     elif isinstance(config, BaselineConfig):
@@ -128,7 +132,7 @@ def gnn_graph_spec(config: GNNConfig) -> GraphSpec:
 # --- graph model ---------------------------------------------------------------
 
 def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members, zero_shot,
-             on_unit) -> FitOutput:
+             init_features, on_unit) -> FitOutput:
     features = _features(city, config)
     dataset = build_dataset(city, features, rates)
     history = dataset.rates.loc[dataset.rates.index < window.test_start]
@@ -142,6 +146,16 @@ def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members
     train_set, val_set = samples.subset(split.train), samples.subset(split.val)
     test_set = samples.subset(split.test)
     relations = graph.relation_tensors()
+    if init_members and init_features is not None and list(init_features) != samples.feature_names:
+        theirs, ours = list(init_features), samples.feature_names
+        detail = (f"only in the saved model: {sorted(set(theirs) - set(ours))}; only here: "
+                  f"{sorted(set(ours) - set(theirs))}" if set(theirs) != set(ours)
+                  else "the same features in a different order")
+        message = (f"The saved model was trained on different input features ({detail}). It "
+                   "needs the same inputs: weather on or off, the same weather and static columns.")
+        if zero_shot:
+            raise ValueError(message)
+        warnings.warn(message + " Inputs that differ start from untrained weights.", stacklevel=4)
 
     def build() -> SpatioTemporalGNN:
         return SpatioTemporalGNN(
@@ -167,11 +181,14 @@ def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members
             loadable = {k: v for k, v in source.items()
                         if k in own and tuple(v.shape) == tuple(own[k].shape)}
             missing = sorted(set(own) - set(loadable))
-            if zero_shot and missing:
-                raise ValueError(
-                    f"The pretrained model does not fit this city's inputs: {missing} could not "
-                    "be loaded. A pretrained model needs the same input features (weather on "
-                    "or off, same static columns) and adaptive=False.")
+            if missing and (zero_shot or member == 0):
+                message = (f"The pretrained model does not fit this city's inputs: {missing} "
+                           "could not be loaded. A pretrained model needs the same input features "
+                           "(weather on or off, same static columns) and adaptive=False.")
+                if zero_shot:
+                    raise ValueError(message)
+                warnings.warn(message + " Those layers start from random weights and are "
+                              "trained here.", stacklevel=4)
             model.load_state_dict(loadable, strict=False)
         assert_mc_dropout_valid(model)
         if not zero_shot:
