@@ -9,7 +9,7 @@ export PYTHONPATH="$PWD/src" AREAFLU_RESEARCH_REPO="${AREAFLU_RESEARCH_REPO:-/sc
 export PYTHONWARNINGS=ignore
 python - <<'PY'
 import sys; sys.path.insert(0, "scripts")
-import torch, torch_geometric, pandas, numpy, scipy
+import torch, torch_geometric, pandas, numpy, scipy, statsmodels
 print("versions", torch.__version__, torch_geometric.__version__, pandas.__version__, numpy.__version__)
 from research_bridge import boston_from_research, city_from_research
 print(boston_from_research().summary().splitlines()[0])

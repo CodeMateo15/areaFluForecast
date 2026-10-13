@@ -81,6 +81,7 @@ areaflu backtest --sample boston --seasons 1 --quick      # try it on bundled da
 | `gnn_st` | Graph neural network over bordering areas and correlated curves; the model from the accompanying paper |
 | `lstm` | Multivariate LSTM: every area's series, no map |
 | `colagnn` | Cola-GNN (Deng et al. 2020), reimplemented from the paper |
+| `arima` | Seasonal ARIMA per area (annual cycle as harmonic regressors), the paper's statistical baseline |
 | `persistence`, `seasonal_naive` | Baselines every model is compared with |
 | `af.pretrained("boston")` | Transferable graph models trained on Boston, one per horizon |
 

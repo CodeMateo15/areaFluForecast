@@ -219,7 +219,8 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
     extended.index.name = city.rates.index.name
     origin = len(city.rates) - 1
 
-    total = sum(units(c) + (tuning_units(c) if tune else 0) for c in resolved.values()) * len(horizons)
+    total = sum(units(c, city.n_areas) + (tuning_units(c) if tune else 0)
+                for c in resolved.values()) * len(horizons)
     bar = Progress(total, enabled=progress).start()
     frames, chosen, saved = [], {}, []
     started = time.localtime()

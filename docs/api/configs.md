@@ -14,6 +14,7 @@ Every model is described by a settings object. Pass a preset name such as
 | `gnn_st_noadapt` | the graph model without city-specific learned links; transferable between cities |
 | `lstm` | multivariate LSTM |
 | `colagnn` | Cola-GNN |
+| `arima` | seasonal ARIMA, one per area (needs no training; uses `statsmodels`) |
 | `persistence`, `seasonal_naive` | baselines, always included in backtests |
 
 **Experimental settings.** A few `GNNConfig` and interval settings come from
@@ -28,5 +29,7 @@ and `two_sided_intervals`. Every other setting is stable.
 ::: areafluforecast.configs.LSTMConfig
 
 ::: areafluforecast.configs.ColaGNNConfig
+
+::: areafluforecast.configs.ArimaConfig
 
 ::: areafluforecast.configs.BaselineConfig

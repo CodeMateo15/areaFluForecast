@@ -189,7 +189,7 @@ def backtest(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
         resolved["pretrained"] = resolve(init.config, configs.get("pretrained"))
     resolved = {name: with_seed(config, seed) for name, config in resolved.items()}
 
-    total = sum((units(c) + (tuning_units(c) if tune else 0)) for c in resolved.values())
+    total = sum((units(c, city.n_areas) + (tuning_units(c) if tune else 0)) for c in resolved.values())
     total *= len(years) * len(horizons)
     bar = Progress(total, enabled=progress).start()
     if progress:

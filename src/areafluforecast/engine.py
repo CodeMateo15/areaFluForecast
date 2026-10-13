@@ -16,7 +16,7 @@ import torch
 
 from .city import City
 from .climatology import fit_climatology
-from .configs import BaselineConfig, ColaGNNConfig, GNNConfig, LSTMConfig, ModelConfig, to_json
+from .configs import ArimaConfig, BaselineConfig, ColaGNNConfig, GNNConfig, LSTMConfig, ModelConfig, to_json
 from .errors import DataError, DataWarning
 from .graphs import GraphSpec, build_graph
 from .intervals import QUANTILE_COLUMNS, attach_intervals, fit_intervals
@@ -51,8 +51,10 @@ class FitOutput:
     standard: pd.DataFrame | None = None   # with config.refit: the pre-refit forecasts
 
 
-def units(config: ModelConfig) -> int:
-    """How many progress units fitting this config takes."""
+def units(config: ModelConfig, n_areas: int = 1) -> int:
+    """How many progress units fitting this config takes (ARIMA: one per area)."""
+    if isinstance(config, ArimaConfig):
+        return max(1, n_areas)
     return max(1, getattr(config, "n_seeds", 1)) * (2 if getattr(config, "refit", False) else 1)
 
 
@@ -98,6 +100,8 @@ def run_model(city: City, config: ModelConfig, *, horizon: int, test_start, test
             out = _run_sequence(city, config, rates, window, split, torch_device, on_unit)
         elif isinstance(config, BaselineConfig):
             out = _run_baseline(city, config, rates, window, split, on_unit)
+        elif isinstance(config, ArimaConfig):
+            out = _run_arima(city, config, rates, window, split, on_unit)
         else:
             raise TypeError(f"Unknown config {type(config).__name__}")
     out.meta.update({"horizon": int(horizon), "window": window.to_json(),
@@ -390,3 +394,59 @@ def _baseline_value(series: np.ndarray, origin: int, horizon: int, kind: str, me
                 return float(series[week])
         return float(median)
     raise ValueError(f"Unknown baseline {kind!r}")
+
+
+# --- seasonal ARIMA ----------------------------------------------------------------
+
+def _run_arima(city, config: ArimaConfig, rates, window, split, on_unit) -> FitOutput:
+    """One seasonal ARIMA per area, as the research `run_arima.py`.
+
+    The order is searched on the validation origins (fit through the last
+    training origin, then rolled forward), validation forecasts with that order
+    size the ranges, and the scored origins are forecast from a fit through the
+    first scored origin rolled forward. If more than a few forecasts fell back
+    to "same as last week", a DataWarning says so.
+    """
+    from .arima import select_order, walk_forward_forecasts
+
+    index = split.index
+    horizon, steps = window.min_horizon, window.max_horizon
+    train_last = index[split.train[-1]]
+    val_dates, test_dates = index[split.val], index[split.test]
+    values = rates.to_numpy(dtype=float)
+    shape = (city.n_areas, len(window.horizons))
+    pred_val = np.zeros((len(split.val),) + shape)
+    pred_test = np.zeros((len(split.test),) + shape)
+    orders, fallbacks = {}, 0
+    for node, area in enumerate(city.areas):
+        series = rates[area]
+        order = select_order(series, train_last, val_dates, horizon, steps,
+                             harmonics=config.harmonics, max_p=config.max_p,
+                             max_d=config.max_d, max_q=config.max_q)
+        orders[area] = str(order)
+        val_fc, _ = walk_forward_forecasts(series, order, val_dates, steps, config.harmonics,
+                                           initial_end=train_last)
+        test_fc, failed = walk_forward_forecasts(series, order, test_dates, steps, config.harmonics)
+        fallbacks += failed
+        for h_idx, h in enumerate(window.horizons):
+            pred_val[:, node, h_idx] = [f[h - 1] for f in val_fc]
+            pred_test[:, node, h_idx] = [f[h - 1] for f in test_fc]
+        if on_unit:
+            on_unit(f"{config.kind} {area}")
+
+    def actual(positions):
+        return np.stack([[values[t + h] for h in window.horizons]
+                         for t in positions]).transpose(0, 2, 1)
+
+    test = _frame(index, split.test, window.horizons, city.areas, pred_test, actual(split.test))
+    val = _frame(index, split.val, window.horizons, city.areas, pred_val, actual(split.val))
+    interval_model = fit_intervals(val["predicted"], val["actual"], val["horizon"],
+                                   two_sided=config.two_sided_intervals)
+    test = attach_intervals(test, interval_model)
+    n_forecasts = city.n_areas * len(split.test)
+    if n_forecasts and fallbacks / n_forecasts > 0.05:
+        warnings.warn(f"arima: {fallbacks}/{n_forecasts} forecasts fell back to the last observed "
+                      "week (persistence); treat them as degraded.", DataWarning, stacklevel=3)
+    return FitOutput(test=test, val=val, config=config,
+                     meta={"intervals": interval_model.to_json(), "selected_orders": orders,
+                           "fallback_forecasts": fallbacks})

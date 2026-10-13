@@ -11,7 +11,8 @@ from areafluforecast.intervals import QUANTILE_COLUMNS
 
 pytestmark = pytest.mark.slow
 TINY = {"gnn_st": {"n_seeds": 1, "epochs": 2, "mc_samples": 4},
-        "lstm": {"n_seeds": 1, "epochs": 2}, "colagnn": {"n_seeds": 1, "epochs": 2}}
+        "lstm": {"n_seeds": 1, "epochs": 2}, "colagnn": {"n_seeds": 1, "epochs": 2},
+        "arima": {"max_p": 2, "max_d": 1, "max_q": 1}}
 
 
 @pytest.fixture(scope="module")
@@ -37,7 +38,8 @@ def test_sample_loads(city):
 
 def test_backtest(backtest, city):
     p = backtest.predictions
-    assert set(p["model"]) == {"gnn_st", "lstm", "colagnn", "persistence", "seasonal_naive"}
+    assert set(p["model"]) == {"gnn_st", "lstm", "colagnn", "arima", "persistence",
+                              "seasonal_naive"}
     start, end = city.season_window(2024)
     assert p["target_date"].between(start, end).all()
     assert p[list(QUANTILE_COLUMNS)].notna().all().all()
@@ -57,7 +59,7 @@ def test_forecast_uses_latest_backtest(city, runs, backtest):
     last = city.rates.index.max()
     assert table["origin_date"].eq(last).all()
     assert (table["target_date"] > last).all()
-    assert len(table) == 3 * 3 * city.n_areas
+    assert len(table) == len(af.configs.DEFAULT_MODELS) * 3 * city.n_areas
     assert np.all(np.diff(table[list(QUANTILE_COLUMNS)].to_numpy(), axis=1) >= 0)
     # Horizon 3 was not in the backtest, so its trust says so.
     assert set(table.loc[table["horizon"] == 3, "trust"]) == {"not backtested"}
@@ -147,7 +149,7 @@ def test_cli_check(capsys):
 def test_combine_matches_one_backtest(city, backtest):
     """Per-horizon parts, combined, report what one backtest over both reports."""
     from areafluforecast.backtest import combine
-    parts = [af.backtest(city, ["gnn_st", "lstm", "colagnn"], seasons=[2024], horizons=(h,),
+    parts = [af.backtest(city, ["gnn_st", "lstm", "colagnn", "arima"], seasons=[2024], horizons=(h,),
                          configs=TINY, out_dir=None, progress=False) for h in (1, 2)]
     merged = combine(parts)
     key = ["model", "horizon"]

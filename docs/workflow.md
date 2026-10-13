@@ -16,7 +16,7 @@ comparison.
 
 | argument | default | meaning |
 |---|---|---|
-| `models` | `("gnn_st", "lstm", "colagnn")` | preset names or config objects ([Model settings](api/configs.md)) |
+| `models` | `("gnn_st", "lstm", "colagnn", "arima")` | preset names or config objects ([Model settings](api/configs.md)) |
 | `seasons` | `2` | the last *n* complete seasons, or season years such as `[2023, 2024]` |
 | `horizons` | `(1, 2, 3, 4)` | weeks ahead |
 | `configs` | `None` | per-model overrides, e.g. `{"gnn_st": {"n_seeds": 3}}` |

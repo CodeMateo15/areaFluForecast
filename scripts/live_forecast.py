@@ -195,7 +195,13 @@ def assemble(args) -> None:
         missing = [p.name for p in wanted if not (p / "backtest.json").exists()]
         if missing:
             raise SystemExit(f"Backtest parts missing: {missing}. Run MODE=live_backtest first.")
-        bt = combine([BacktestResult.load(p) for p in wanted])
+        parts = [BacktestResult.load(p) for p in wanted]
+        stale = [p.name for p, part in zip(wanted, parts)
+                 if not set(args.models) <= set(part.predictions["model"])]
+        if stale:
+            raise SystemExit(f"Backtest parts {stale} predate models {list(args.models)}; delete "
+                             "them and rerun MODE=live_backtest.")
+        bt = combine(parts)
         bt.save(runs / args.city / f"backtest_{time.strftime('%Y%m%d-%H%M%S')}")
         print(f"Combined {len(wanted)} backtest parts into {bt.path}", flush=True)
     origin = str(city.rates.index.max().date())

@@ -72,7 +72,7 @@ def _months(text: str):
 
 def _configs(args) -> dict:
     overrides = {}
-    learned = [m for m in args.models if m not in ("persistence", "seasonal_naive")]
+    learned = [m for m in args.models if m not in ("persistence", "seasonal_naive", "arima")]
     if args.pretrained or args.init_from:
         learned.append("pretrained")
     if args.quick:

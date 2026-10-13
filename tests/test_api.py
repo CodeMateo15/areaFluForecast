@@ -86,6 +86,7 @@ def test_seed_reaches_every_seed_field():
     config = with_seed(af.resolve("gnn_st"), 7)
     assert (config.seed, config.mc_seed) == (7, 88)
     assert with_seed(af.resolve("persistence"), 7) == af.resolve("persistence")
+    assert with_seed(af.resolve("arima"), 7) == af.resolve("arima")
 
 
 # --- command line ----------------------------------------------------------------

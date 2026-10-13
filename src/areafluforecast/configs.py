@@ -99,7 +99,27 @@ class BaselineConfig:
     two_sided_intervals: bool = False
 
 
-ModelConfig = GNNConfig | LSTMConfig | ColaGNNConfig | BaselineConfig
+@dataclass(frozen=True)
+class ArimaConfig:
+    """One seasonal ARIMA per area (the paper's "Seasonal ARIMA" row).
+
+    The (p, d, q) order is chosen per area by walk-forward RMSE on the
+    validation origins, at the horizon being forecast. `harmonics` sin/cos pairs
+    of the day of year enter as regressors for the annual cycle (0 = plain
+    ARIMA). The grid is p < max_p, d < max_d, q < max_q. Needs statsmodels
+    (`pip install areafluforecast[arima]`). Not trained by gradient descent, so
+    it has no seeds and is never tuned.
+    """
+
+    kind: str = "arima"
+    harmonics: int = 3
+    max_p: int = 4
+    max_d: int = 2
+    max_q: int = 4
+    two_sided_intervals: bool = False
+
+
+ModelConfig = GNNConfig | LSTMConfig | ColaGNNConfig | BaselineConfig | ArimaConfig
 
 PRESETS: dict[str, ModelConfig] = {
     # The package default: the paper's graph model without the static
@@ -119,8 +139,9 @@ PRESETS: dict[str, ModelConfig] = {
     "colagnn": ColaGNNConfig(),
     "persistence": BaselineConfig(kind="persistence"),
     "seasonal_naive": BaselineConfig(kind="seasonal_naive"),
+    "arima": ArimaConfig(),
 }
-DEFAULT_MODELS = ("gnn_st", "lstm", "colagnn")
+DEFAULT_MODELS = ("gnn_st", "lstm", "colagnn", "arima")
 BASELINES = ("persistence", "seasonal_naive")
 
 
@@ -156,7 +177,7 @@ def with_seed(config: ModelConfig, seed: int | None) -> ModelConfig:
 
 
 def is_learned(config: ModelConfig) -> bool:
-    return not isinstance(config, BaselineConfig)
+    return not isinstance(config, (BaselineConfig, ArimaConfig))
 
 
 def to_json(config: ModelConfig) -> dict:
@@ -170,7 +191,8 @@ def to_json(config: ModelConfig) -> dict:
 
 def from_json(payload: dict) -> ModelConfig:
     payload = dict(payload)
-    cls = {c.__name__: c for c in (GNNConfig, LSTMConfig, ColaGNNConfig, BaselineConfig)}[
+    cls = {c.__name__: c for c in (GNNConfig, LSTMConfig, ColaGNNConfig, BaselineConfig,
+                                              ArimaConfig)}[
         payload.pop("type")]
     valid = {f.name for f in fields(cls)}
     clean = {k: (tuple(v) if isinstance(v, list) else v) for k, v in payload.items() if k in valid}

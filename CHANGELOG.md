@@ -5,6 +5,20 @@ All notable changes to areaFluForecast are listed here. The format follows
 [Semantic Versioning](https://semver.org/) as described in the
 [versioning policy](docs/versioning.md).
 
+## [1.1.0] - 2026-10-13
+
+### Added
+- `arima` preset (`ArimaConfig`): one seasonal ARIMA per area, the order chosen
+  by walk-forward validation error at the forecast horizon, with the annual
+  cycle as 3 sin/cos regressors. A port of the research `run_arima.py`; on
+  Boston 2025-26 its WIS matches the paper's within 0.7% at 1, 2 and 4 weeks.
+  It is in `DEFAULT_MODELS`, and `statsmodels` is now a dependency.
+
+### Changed
+- ARIMA reports progress once per area, so long runs show a live percentage.
+- `scripts/live_forecast.py assemble` stops with a clear message when saved
+  backtest parts were made before a model was added, instead of combining them.
+
 ## [1.0.0] - 2026-10-12
 
 The first stable release. The public API, the command line and the saved-file
