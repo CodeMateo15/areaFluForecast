@@ -18,7 +18,8 @@ Layout under --root (default live/):
     runs/<city>/backtest_*          the trust-check backtest, reused until the seasons change
     runs/<city>/parts/              per-task pieces before `assemble`
     <season>/<city>/<origin>/       one frozen folder per forecast: forecast.csv,
-                                    forecast_flusight.csv, trust.md, rates_asof.csv, meta.json
+                                    forecast_flusight.csv, trust.md, rates_asof.csv, meta.json,
+                                    runtime.csv (seconds per model and horizon)
     <season>/<city>/scores.csv      every archived forecast joined to what happened
 
 This track is separate from the paper's backtest: its forecasts are written once and
@@ -30,8 +31,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
 import sys
 import time
+import warnings
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -92,6 +96,34 @@ def cached_backtest(runs: Path, city: str, seasons, models) -> BacktestResult | 
     return None
 
 
+def machine() -> str:
+    """Where a forecast ran, in words that say nothing about who ran it."""
+    name = {"Darwin": "macOS"}.get(platform.system(), platform.system())
+    return f"{name} {platform.machine()}, {os.cpu_count()} CPUs"
+
+
+def timed_forecast(city: af.City, models, horizons, configs: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """af.forecast one model and horizon at a time, timing each. Each config carries
+    its own seed, so the numbers match a single call with every model. The trust
+    check is left to archive(), which has the backtest."""
+    frames, rows = [], []
+    for horizon in horizons:
+        for model in models:
+            started = time.perf_counter()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", af.TrustWarning)
+                fc = af.forecast(city, (model,), horizons=(horizon,), configs=configs, backtest=None,
+                                 out_dir=None)
+            seconds = time.perf_counter() - started
+            frames.append(fc.table)
+            config = af.resolve(model, configs.get(model))
+            rows.append({"model": model, "horizon": horizon, "seconds": round(seconds, 2),
+                         "n_seeds": getattr(config, "n_seeds", None),
+                         "epochs": getattr(config, "epochs", None), "machine": machine()})
+            print(f"{model} {horizon} wk: {seconds:.1f}s", flush=True)
+    return pd.concat(frames, ignore_index=True), pd.DataFrame(rows)
+
+
 def training_window(city: af.City, model: str = "gnn_st", horizon: int = 1) -> dict:
     """The target weeks one model learned from and held out, by the same split
     forecast() uses, so the app can say which seasons are training seasons."""
@@ -106,7 +138,8 @@ def training_window(city: af.City, model: str = "gnn_st", horizon: int = 1) -> d
             "validation_targets": span(split.val)}
 
 
-def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick: bool) -> Path:
+def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick: bool,
+            runtime: pd.DataFrame | None = None) -> Path:
     """Write the frozen forecast folder. Never overwrites without --force."""
     origin = city.rates.index.max()
     season = season_of(city, origin)
@@ -129,6 +162,8 @@ def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick:
     city.rates.to_csv(folder / "rates_asof.csv", date_format="%Y-%m-%d")
     bt.comparison.to_csv(folder / "backtest_comparison.csv", index=False)
     bt.scores.to_csv(folder / "backtest_scores.csv", index=False)
+    if runtime is not None and not runtime.empty:
+        runtime.to_csv(folder / "runtime.csv", index=False)
     (folder / "meta.json").write_text(json.dumps({
         "city": args.city, "label": city.label, "season": season,
         "origin": str(origin.date()), "horizons": list(HORIZONS), "models": list(args.models),
@@ -154,9 +189,8 @@ def run(args) -> None:
                          out_dir=runs)
     else:
         print(f"Reusing backtest {bt.path}", flush=True)
-    fc = af.forecast(city, args.models, horizons=HORIZONS, configs=configs, backtest=bt,
-                     out_dir=runs)
-    archive(args, city, fc.table, bt, bool(configs))
+    table, runtime = timed_forecast(city, args.models, HORIZONS, configs)
+    archive(args, city, table, bt, bool(configs), runtime)
 
 
 def backtest_part(args) -> None:
@@ -177,10 +211,10 @@ def forecast_part(args) -> None:
     city = load(args)
     origin = str(city.rates.index.max().date())
     out = Path(args.root) / "runs" / args.city / "parts" / origin / f"fc_h{args.horizon}.csv"
-    fc = af.forecast(city, args.models, horizons=(args.horizon,),
-                     configs=quick_configs(args.models), backtest=None, out_dir=None)
+    table, runtime = timed_forecast(city, args.models, (args.horizon,), quick_configs(args.models))
     out.parent.mkdir(parents=True, exist_ok=True)
-    fc.table.to_csv(out, index=False)
+    table.to_csv(out, index=False)
+    runtime.to_csv(out.parent / f"runtime_h{args.horizon}.csv", index=False)
     print(f"Outputs: {out}", flush=True)
 
 
@@ -211,7 +245,10 @@ def assemble(args) -> None:
         raise SystemExit(f"Forecast parts for {origin} missing: {missing}. Run MODE=live_forecast.")
     table = pd.concat([pd.read_csv(f, parse_dates=["origin_date", "target_date"], dtype={"area": str})
                        for f in files], ignore_index=True)
-    archive(args, city, table, bt, bool(quick_configs(args.models)))
+    timings = [parts_dir / origin / f"runtime_h{h}.csv" for h in HORIZONS]
+    runtime = (pd.concat([pd.read_csv(f) for f in timings], ignore_index=True)
+               if all(f.exists() for f in timings) else None)
+    archive(args, city, table, bt, bool(quick_configs(args.models)), runtime)
     print(bt.report(show=False))
 
 
