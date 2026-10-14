@@ -1,5 +1,7 @@
 """Would these models have worked here? Rolling-origin backtest on past seasons.
 
+Rolling-origin evaluation follows Tashman (2000, Int J Forecast 16:437).
+
 For each past season the models are trained only on weeks before it, then
 forecast every week of it, exactly as they would have in real time (minus
 reporting delays; see the README). Every model is compared with persistence

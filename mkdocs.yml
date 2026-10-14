@@ -43,6 +43,7 @@ nav:
       - Limits to know: limits.md
       - Reproducing the paper: reproducibility.md
       - Data and credits: data-and-credits.md
+      - References: references.md
       - Versioning and stability: versioning.md
   - API reference:
       - City and data: api/city.md

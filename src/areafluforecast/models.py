@@ -2,10 +2,12 @@
 
 * `SpatioTemporalGNN` ("gnn_st") -- the graph model from the paper: dilated causal
   convolutions over each area's history, graph mixing over the weighted
-  adjacency plus a learned one, and a forecast measured from a learned blend of
-  last week's level and the seasonal curve.
+  adjacency plus a learned one (graph convolution: Kipf & Welling 2017, ICLR),
+  and a forecast measured from a learned blend of last week's level and the
+  seasonal curve.
 * `MultivariateLSTM` -- every area's series in one input vector; cross-area
-  information but no graph.
+  information but no graph (LSTM: Hochreiter & Schmidhuber 1997, Neural Comput
+  9:1735).
 * `ColaGNN` -- a reimplementation of Deng et al. (2020, CIKM) from the paper, not
   the authors' code: cross-location attention gated against the border graph.
 

@@ -7,6 +7,8 @@ Edge types, all undirected, accumulated into one weight matrix W:
   borders apart (0.5 * decay^(hops - 1)).
 * **correlation** -- areas whose flu series correlated above a threshold before
   the scored window, weighted by the correlation. Uses pre-scoring weeks only.
+  Flu spreads along commuting links as well as borders, so areas far apart can
+  move in step (Viboud et al. 2006, Science 312:447).
 * **similarity** (off by default) -- areas with similar static characteristics.
 
 Copied from the research code (influenza/graphs.py), minus its ablation-only

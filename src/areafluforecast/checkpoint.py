@@ -4,6 +4,8 @@ A checkpoint holds every ensemble member's weights plus the configuration and
 the city it was trained on. Applying it to another city (with or without further
 training) re-derives that city's normalisation, seasonal baseline and interval
 calibration from the city's own data, as the research transfer experiments did.
+Transferring a graph model between regions follows Panagopoulos et al. (2021,
+AAAI 35:4838).
 
 A checkpoint is trained for one horizon. To start a 1-4 week forecast from saved
 models, pass one per horizon: ``init_from={1: "h1.pt", 2: "h2.pt", ...}``, or the

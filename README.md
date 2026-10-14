@@ -153,6 +153,20 @@ Cite the version you used:
 resolves to the latest version. Details are in [`CITATION.cff`](https://github.com/CodeMateo15/areaFluForecast/blob/main/CITATION.cff),
 or use GitHub's **Cite this repository** button.
 
+## References
+
+The package implements methods from published work. The core ones:
+
+- Cola-GNN: Deng et al. 2020, CIKM '20, [doi:10.1145/3340531.3411975](https://doi.org/10.1145/3340531.3411975)
+- Graph convolution: Kipf & Welling 2017, ICLR, [arXiv:1609.02907](https://arxiv.org/abs/1609.02907)
+- LSTM: Hochreiter & Schmidhuber 1997, *Neural Comput* 9:1735, [doi:10.1162/neco.1997.9.8.1735](https://doi.org/10.1162/neco.1997.9.8.1735)
+- Weighted interval score: Bracher et al. 2021, *PLoS Comput Biol* 17:e1008618, [doi:10.1371/journal.pcbi.1008618](https://doi.org/10.1371/journal.pcbi.1008618)
+- FluSight quantiles and relative WIS: Mathis et al. 2024, *Nat Commun* 15:6289, [doi:10.1038/s41467-024-50601-9](https://doi.org/10.1038/s41467-024-50601-9)
+- Diebold-Mariano test: Diebold & Mariano 1995, *J Bus Econ Stat* 13:253, [doi:10.1080/07350015.1995.10524599](https://doi.org/10.1080/07350015.1995.10524599)
+
+The full list, with what each paper is used for, is in
+[References](https://areafluforecast.readthedocs.io/en/latest/references/).
+
 Found a bug or want a feature? Open an [issue](https://github.com/CodeMateo15/areaFluForecast/issues).
 
 ## Credits

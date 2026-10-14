@@ -5,6 +5,14 @@ All notable changes to areaFluForecast are listed here. The format follows
 [Semantic Versioning](https://semver.org/) as described in the
 [versioning policy](docs/versioning.md).
 
+## [Unreleased]
+
+### Added
+- A [References](docs/references.md) page listing the papers whose methods the
+  package implements, with DOIs and what each is used for. The same papers are
+  in `CITATION.cff` under `references`, the core ones in the README, and the
+  modules that implement each method cite it in their docstrings.
+
 ## [1.1.0] - 2026-10-13
 
 ### Added

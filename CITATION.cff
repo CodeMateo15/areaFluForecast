@@ -28,3 +28,513 @@ keywords:
   - graph neural network
   - public health
   - epidemiology
+# Papers whose methods the package implements; see docs/references.md.
+references:
+  - type: conference-paper
+    authors:
+      - family-names: "Deng"
+        given-names: "Songgaojun"
+      - family-names: "Wang"
+        given-names: "Shusen"
+      - family-names: "Rangwala"
+        given-names: "Huzefa"
+      - family-names: "Wang"
+        given-names: "Lijing"
+      - family-names: "Ning"
+        given-names: "Yue"
+    title: "Cola-GNN: Cross-location Attention based Graph Neural Networks for Long-term ILI Prediction"
+    year: 2020
+    conference:
+      name: "Proceedings of the 29th ACM International Conference on Information & Knowledge Management"
+    start: 245
+    end: 254
+    doi: 10.1145/3340531.3411975
+  - type: conference-paper
+    authors:
+      - family-names: "Kipf"
+        given-names: "Thomas N."
+      - family-names: "Welling"
+        given-names: "Max"
+    title: "Semi-supervised classification with graph convolutional networks"
+    year: 2017
+    conference:
+      name: "Proceedings of the 5th International Conference on Learning Representations (ICLR 2017)"
+    doi: 10.48550/arXiv.1609.02907
+    url: "https://arxiv.org/abs/1609.02907"
+  - type: article
+    authors:
+      - family-names: "Hochreiter"
+        given-names: "Sepp"
+      - family-names: "Schmidhuber"
+        given-names: "Jürgen"
+    title: "Long Short-Term Memory"
+    year: 1997
+    journal: "Neural Computation"
+    volume: 9
+    issue: 8
+    start: 1735
+    end: 1780
+    doi: 10.1162/neco.1997.9.8.1735
+  - type: article
+    authors:
+      - family-names: "Kandula"
+        given-names: "Sasikiran"
+      - family-names: "Shaman"
+        given-names: "Jeffrey"
+    title: "Near-term forecasts of influenza-like illness: an evaluation of autoregressive time series approaches"
+    year: 2019
+    journal: "Epidemics"
+    volume: 27
+    start: 41
+    end: 51
+    doi: 10.1016/j.epidem.2019.01.002
+  - type: article
+    authors:
+      - family-names: "Bracher"
+        given-names: "Johannes"
+      - family-names: "Ray"
+        given-names: "Evan L."
+      - family-names: "Gneiting"
+        given-names: "Tilmann"
+      - family-names: "Reich"
+        given-names: "Nicholas G."
+    title: "Evaluating epidemic forecasts in an interval format"
+    year: 2021
+    journal: "PLoS Computational Biology"
+    volume: 17
+    issue: 2
+    start: "e1008618"
+    doi: 10.1371/journal.pcbi.1008618
+  - type: article
+    authors:
+      - family-names: "Gneiting"
+        given-names: "Tilmann"
+      - family-names: "Raftery"
+        given-names: "Adrian E"
+    title: "Strictly Proper Scoring Rules, Prediction, and Estimation"
+    year: 2007
+    journal: "Journal of the American Statistical Association"
+    volume: 102
+    issue: 477
+    start: 359
+    end: 378
+    doi: 10.1198/016214506000001437
+  - type: article
+    authors:
+      - family-names: "Mathis"
+        given-names: "Sarabeth M."
+      - family-names: "Webber"
+        given-names: "Alexander E."
+      - family-names: "León"
+        given-names: "Tomás M."
+      - family-names: "Murray"
+        given-names: "Erin L."
+      - family-names: "Sun"
+        given-names: "Monica"
+      - family-names: "White"
+        given-names: "Lauren A."
+      - family-names: "Brooks"
+        given-names: "Logan C."
+      - family-names: "Green"
+        given-names: "Alden"
+      - family-names: "Hu"
+        given-names: "Addison J."
+      - family-names: "Rosenfeld"
+        given-names: "Roni"
+      - family-names: "Shemetov"
+        given-names: "Dmitry"
+      - family-names: "Tibshirani"
+        given-names: "Ryan J."
+      - family-names: "McDonald"
+        given-names: "Daniel J."
+      - family-names: "Kandula"
+        given-names: "Sasikiran"
+      - family-names: "Pei"
+        given-names: "Sen"
+      - family-names: "Yaari"
+        given-names: "Rami"
+      - family-names: "Yamana"
+        given-names: "Teresa K."
+      - family-names: "Shaman"
+        given-names: "Jeffrey"
+      - family-names: "Agarwal"
+        given-names: "Pulak"
+      - family-names: "Balusu"
+        given-names: "Srikar"
+      - family-names: "Gururajan"
+        given-names: "Gautham"
+      - family-names: "Kamarthi"
+        given-names: "Harshavardhan"
+      - family-names: "Prakash"
+        given-names: "B. Aditya"
+      - family-names: "Raman"
+        given-names: "Rishi"
+      - family-names: "Zhao"
+        given-names: "Zhiyuan"
+      - family-names: "Rodríguez"
+        given-names: "Alexander"
+      - family-names: "Meiyappan"
+        given-names: "Akilan"
+      - family-names: "Omar"
+        given-names: "Shalina"
+      - family-names: "Baccam"
+        given-names: "Prasith"
+      - family-names: "Gurung"
+        given-names: "Heidi L."
+      - family-names: "Suchoski"
+        given-names: "Brad T."
+      - family-names: "Stage"
+        given-names: "Steve A."
+      - family-names: "Ajelli"
+        given-names: "Marco"
+      - family-names: "Kummer"
+        given-names: "Allisandra G."
+      - family-names: "Litvinova"
+        given-names: "Maria"
+      - family-names: "Ventura"
+        given-names: "Paulo C."
+      - family-names: "Wadsworth"
+        given-names: "Spencer"
+      - family-names: "Niemi"
+        given-names: "Jarad"
+      - family-names: "Carcelen"
+        given-names: "Erica"
+      - family-names: "Hill"
+        given-names: "Alison L."
+      - family-names: "Loo"
+        given-names: "Sara L."
+      - family-names: "McKee"
+        given-names: "Clifton D."
+      - family-names: "Sato"
+        given-names: "Koji"
+      - family-names: "Smith"
+        given-names: "Claire"
+      - family-names: "Truelove"
+        given-names: "Shaun"
+      - family-names: "Jung"
+        given-names: "Sung-mok"
+      - family-names: "Lemaitre"
+        given-names: "Joseph C."
+      - family-names: "Lessler"
+        given-names: "Justin"
+      - family-names: "McAndrew"
+        given-names: "Thomas"
+      - family-names: "Ye"
+        given-names: "Wenxuan"
+      - family-names: "Bosse"
+        given-names: "Nikos"
+      - family-names: "Hlavacek"
+        given-names: "William S."
+      - family-names: "Lin"
+        given-names: "Yen Ting"
+      - family-names: "Mallela"
+        given-names: "Abhishek"
+      - family-names: "Gibson"
+        given-names: "Graham C."
+      - family-names: "Chen"
+        given-names: "Ye"
+      - family-names: "Lamm"
+        given-names: "Shelby M."
+      - family-names: "Lee"
+        given-names: "Jaechoul"
+      - family-names: "Posner"
+        given-names: "Richard G."
+      - family-names: "Perofsky"
+        given-names: "Amanda C."
+      - family-names: "Viboud"
+        given-names: "Cécile"
+      - family-names: "Clemente"
+        given-names: "Leonardo"
+      - family-names: "Lu"
+        given-names: "Fred"
+      - family-names: "Meyer"
+        given-names: "Austin G."
+      - family-names: "Santillana"
+        given-names: "Mauricio"
+      - family-names: "Chinazzi"
+        given-names: "Matteo"
+      - family-names: "Davis"
+        given-names: "Jessica T."
+      - family-names: "Mu"
+        given-names: "Kunpeng"
+      - family-names: "Pastore y Piontti"
+        given-names: "Ana"
+      - family-names: "Vespignani"
+        given-names: "Alessandro"
+      - family-names: "Xiong"
+        given-names: "Xinyue"
+      - family-names: "Ben-Nun"
+        given-names: "Michal"
+      - family-names: "Riley"
+        given-names: "Pete"
+      - family-names: "Turtle"
+        given-names: "James"
+      - family-names: "Hulme-Lowe"
+        given-names: "Chis"
+      - family-names: "Jessa"
+        given-names: "Shakeel"
+      - family-names: "Nagraj"
+        given-names: "V. P."
+      - family-names: "Turner"
+        given-names: "Stephen D."
+      - family-names: "Williams"
+        given-names: "Desiree"
+      - family-names: "Basu"
+        given-names: "Avranil"
+      - family-names: "Drake"
+        given-names: "John M."
+      - family-names: "Fox"
+        given-names: "Spencer J."
+      - family-names: "Suez"
+        given-names: "Ehsan"
+      - family-names: "Cojocaru"
+        given-names: "Monica G."
+      - family-names: "Thommes"
+        given-names: "Edward W."
+      - family-names: "Cramer"
+        given-names: "Estee Y."
+      - family-names: "Gerding"
+        given-names: "Aaron"
+      - family-names: "Stark"
+        given-names: "Ariane"
+      - family-names: "Ray"
+        given-names: "Evan L."
+      - family-names: "Reich"
+        given-names: "Nicholas G."
+      - family-names: "Shandross"
+        given-names: "Li"
+      - family-names: "Wattanachit"
+        given-names: "Nutcha"
+      - family-names: "Wang"
+        given-names: "Yijin"
+      - family-names: "Zorn"
+        given-names: "Martha W."
+      - family-names: "Aawar"
+        given-names: "Majd Al"
+      - family-names: "Srivastava"
+        given-names: "Ajitesh"
+      - family-names: "Meyers"
+        given-names: "Lauren A."
+      - family-names: "Adiga"
+        given-names: "Aniruddha"
+      - family-names: "Hurt"
+        given-names: "Benjamin"
+      - family-names: "Kaur"
+        given-names: "Gursharn"
+      - family-names: "Lewis"
+        given-names: "Bryan L."
+      - family-names: "Marathe"
+        given-names: "Madhav"
+      - family-names: "Venkatramanan"
+        given-names: "Srinivasan"
+      - family-names: "Butler"
+        given-names: "Patrick"
+      - family-names: "Farabow"
+        given-names: "Andrew"
+      - family-names: "Ramakrishnan"
+        given-names: "Naren"
+      - family-names: "Muralidhar"
+        given-names: "Nikhil"
+      - family-names: "Reed"
+        given-names: "Carrie"
+      - family-names: "Biggerstaff"
+        given-names: "Matthew"
+      - family-names: "Borchering"
+        given-names: "Rebecca K."
+    title: "Evaluation of FluSight influenza forecasting in the 2021–22 and 2022–23 seasons with a new target laboratory-confirmed influenza hospitalizations"
+    year: 2024
+    journal: "Nature Communications"
+    volume: 15
+    issue: 1
+    start: "6289"
+    doi: 10.1038/s41467-024-50601-9
+  - type: article
+    authors:
+      - family-names: "Diebold"
+        given-names: "Francis X."
+      - family-names: "Mariano"
+        given-names: "Roberto S."
+    title: "Comparing Predictive Accuracy"
+    year: 1995
+    journal: "Journal of Business & Economic Statistics"
+    volume: 13
+    issue: 3
+    start: 253
+    end: 263
+    doi: 10.1080/07350015.1995.10524599
+  - type: article
+    authors:
+      - family-names: "Harvey"
+        given-names: "David"
+      - family-names: "Leybourne"
+        given-names: "Stephen"
+      - family-names: "Newbold"
+        given-names: "Paul"
+    title: "Testing the equality of prediction mean squared errors"
+    year: 1997
+    journal: "International Journal of Forecasting"
+    volume: 13
+    issue: 2
+    start: 281
+    end: 291
+    doi: 10.1016/s0169-2070(96)00719-4
+  - type: article
+    authors:
+      - family-names: "Newey"
+        given-names: "Whitney K."
+      - family-names: "West"
+        given-names: "Kenneth D."
+    title: "A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix"
+    year: 1987
+    journal: "Econometrica"
+    volume: 55
+    issue: 3
+    start: 703
+    end: 708
+    doi: 10.2307/1913610
+  - type: article
+    authors:
+      - family-names: "Holm"
+        given-names: "Sture"
+    title: "A Simple Sequentially Rejective Multiple Test Procedure"
+    year: 1979
+    journal: "Scandinavian Journal of Statistics"
+    volume: 6
+    issue: 2
+    start: 65
+    end: 70
+    url: "https://www.jstor.org/stable/4615733"
+  - type: article
+    authors:
+      - family-names: "Tashman"
+        given-names: "Leonard J."
+    title: "Out-of-sample tests of forecasting accuracy: an analysis and review"
+    year: 2000
+    journal: "International Journal of Forecasting"
+    volume: 16
+    issue: 4
+    start: 437
+    end: 450
+    doi: 10.1016/s0169-2070(00)00065-0
+  - type: article
+    authors:
+      - family-names: "Olson"
+        given-names: "Donald R"
+      - family-names: "Heffernan"
+        given-names: "Richard T"
+      - family-names: "Paladini"
+        given-names: "Marc"
+      - family-names: "Konty"
+        given-names: "Kevin"
+      - family-names: "Weiss"
+        given-names: "Don"
+      - family-names: "Mostashari"
+        given-names: "Farzad"
+    title: "Monitoring the Impact of Influenza by Age: Emergency Department Fever and Respiratory Complaint Surveillance in New York City"
+    year: 2007
+    journal: "PLoS Medicine"
+    volume: 4
+    issue: 8
+    start: "e247"
+    doi: 10.1371/journal.pmed.0040247
+  - type: article
+    authors:
+      - family-names: "Shaman"
+        given-names: "Jeffrey"
+      - family-names: "Kohn"
+        given-names: "Melvin"
+    title: "Absolute humidity modulates influenza survival, transmission, and seasonality"
+    year: 2009
+    journal: "Proceedings of the National Academy of Sciences"
+    volume: 106
+    issue: 9
+    start: 3243
+    end: 3248
+    doi: 10.1073/pnas.0806852106
+  - type: article
+    authors:
+      - family-names: "Lowen"
+        given-names: "Anice C."
+      - family-names: "Steel"
+        given-names: "John"
+    title: "Roles of Humidity and Temperature in Shaping Influenza Seasonality"
+    year: 2014
+    journal: "Journal of Virology"
+    volume: 88
+    issue: 14
+    start: 7692
+    end: 7695
+    doi: 10.1128/jvi.03544-13
+  - type: article
+    authors:
+      - family-names: "Viboud"
+        given-names: "Cécile"
+      - family-names: "Bjørnstad"
+        given-names: "Ottar N."
+      - family-names: "Smith"
+        given-names: "David L."
+      - family-names: "Simonsen"
+        given-names: "Lone"
+      - family-names: "Miller"
+        given-names: "Mark A."
+      - family-names: "Grenfell"
+        given-names: "Bryan T."
+    title: "Synchrony, Waves, and Spatial Hierarchies in the Spread of Influenza"
+    year: 2006
+    journal: "Science"
+    volume: 312
+    issue: 5772
+    start: 447
+    end: 451
+    doi: 10.1126/science.1125237
+  - type: article
+    authors:
+      - family-names: "Morris"
+        given-names: "Mitzi"
+      - family-names: "Wheeler-Martin"
+        given-names: "Katherine"
+      - family-names: "Simpson"
+        given-names: "Dan"
+      - family-names: "Mooney"
+        given-names: "Stephen J."
+      - family-names: "Gelman"
+        given-names: "Andrew"
+      - family-names: "DiMaggio"
+        given-names: "Charles"
+    title: "Bayesian hierarchical spatial models: Implementing the Besag York Mollié model in stan"
+    year: 2019
+    journal: "Spatial and Spatio-temporal Epidemiology"
+    volume: 31
+    start: "100301"
+    doi: 10.1016/j.sste.2019.100301
+  - type: article
+    authors:
+      - family-names: "Panagopoulos"
+        given-names: "George"
+      - family-names: "Nikolentzos"
+        given-names: "Giannis"
+      - family-names: "Vazirgiannis"
+        given-names: "Michalis"
+    title: "Transfer Graph Neural Networks for Pandemic Forecasting"
+    year: 2021
+    journal: "Proceedings of the AAAI Conference on Artificial Intelligence"
+    volume: 35
+    issue: 6
+    start: 4838
+    end: 4845
+    doi: 10.1609/aaai.v35i6.16616
+  - type: article
+    authors:
+      - family-names: "Yang"
+        given-names: "Wan"
+      - family-names: "Olson"
+        given-names: "Donald R."
+      - family-names: "Shaman"
+        given-names: "Jeffrey"
+    title: "Forecasting Influenza Outbreaks in Boroughs and Neighborhoods of New York City"
+    year: 2016
+    journal: "PLoS Computational Biology"
+    volume: 12
+    issue: 11
+    start: "e1005201"
+    doi: 10.1371/journal.pcbi.1005201

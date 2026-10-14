@@ -10,7 +10,7 @@ Fitted on the validation split and applied unchanged to scored weeks:
   3. A per-horizon scale kappa makes validation coverage exactly 95%, so no model
      relies on Gaussian residuals and all are calibrated on the same held-out weeks.
 
-The 23 FluSight quantiles come from empirical quantiles of the standardised
+The 23 FluSight quantiles (Mathis et al. 2024, Nat Commun 15:6289) come from empirical quantiles of the standardised
 validation residual, so the predictive distribution's shape is learned, not
 assumed. `two_sided=True` fits each edge of the band separately by quantile
 regression (for forecasts that lag the curve and so err low on the way up); it is

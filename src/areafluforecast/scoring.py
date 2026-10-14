@@ -3,16 +3,24 @@
 * **Weighted interval score (WIS)** -- the score CDC FluSight ranks teams on
   (Bracher et al. 2021, PLoS Comput Biol 17:e1008618). It judges the whole
   forecast, band as well as point, in the target's own units. Lower is better.
+  It is a proper scoring rule (Gneiting & Raftery 2007, J Am Stat Assoc
+  102:359): in expectation, a forecaster scores best by reporting their honest
+  predictive distribution.
 * **Relative WIS** -- a model's WIS divided by persistence's ("next week looks
   like this week") on the same weeks. Below 1 means the model beat the
-  simplest forecast a department could make by hand.
+  simplest forecast a department could make by hand. FluSight reports the same
+  ratio against its baseline (Mathis et al. 2024, Nat Commun 15:6289).
 * **Diebold-Mariano test** -- is the weekly gap between two models' scores
   bigger than week-to-week noise? Tested over target WEEKS, with every area
   kept together inside a week: areas in one city move together and consecutive
   weeks are correlated, so treating every area-week as independent would make
-  every difference look significant.
+  every difference look significant. The test is Diebold & Mariano's (1995,
+  J Bus Econ Stat 13:253), with the Newey & West variance (1987, Econometrica
+  55:703) and the Harvey, Leybourne & Newbold small-sample correction (1997,
+  Int J Forecast 13:281).
 * **Holm correction** -- many models x horizons are compared at once, so the
-  p-values are adjusted for the number of comparisons.
+  p-values are adjusted for the number of comparisons (Holm 1979, Scand J Stat
+  6:65).
 
 Same formulas as the research code (influenza/scoring.py).
 """

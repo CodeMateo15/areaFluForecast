@@ -5,6 +5,10 @@ chosen by walk-forward validation RMSE at the forecast horizon, then the fitted
 state rolled forward one observed week at a time (no refit). `harmonics` sin/cos
 pairs on the day-of-year angle enter as exogenous regressors; they are a
 function of the calendar only, so their future values are known at the origin.
+
+Autoregressive models like this stay competitive with far more complex ones at
+1-4 weeks ahead (Kandula & Shaman 2019, Epidemics 27:41), which is why the
+paper uses one as its statistical baseline.
 """
 
 from __future__ import annotations

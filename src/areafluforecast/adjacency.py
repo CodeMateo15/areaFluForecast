@@ -5,7 +5,9 @@ needs no GIS library: in a topologically clean boundary file (Census TIGER, most
 city open-data portals) two polygons that share a border share the *identical*
 vertex coordinates, so two areas are adjacent exactly when they share at least
 two boundary vertices. Two rather than one, because a single shared vertex is a
-corner touch, not a border.
+corner touch, not a border. Building neighbour lists from boundary files is
+standard in spatial epidemiology (see Morris et al. 2019, Spat Spatiotemporal
+Epidemiol 31:100301).
 
 For files that are not topologically clean (areas digitised separately, slivers
 between them), `method="touches"` uses shapely with a snapping tolerance. Check

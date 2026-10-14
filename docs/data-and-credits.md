@@ -46,6 +46,9 @@ This work was supported by the Boston Public Health Commission, Columbus Public
 Health, the PEAK Trailblazer fellowship, and Prof. Ariel Hamlin (Northeastern
 University).
 
+The papers whose methods the package implements are listed in
+[References](references.md).
+
 ## Citing
 
 Please cite the version you used. The citation details are in

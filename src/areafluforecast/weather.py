@@ -5,6 +5,9 @@ are aggregated to the same weeks as the flu data.
 
 Weather is optional. In the research behind this package it helped the graph
 model a little (mostly at 2 weeks ahead); the models run on rates alone.
+Humidity and temperature are offered because they shape influenza transmission
+and seasonality (Shaman & Kohn 2009, PNAS 106:3243; Lowen & Steel 2014, J Virol
+88:7692).
 """
 
 from __future__ import annotations
