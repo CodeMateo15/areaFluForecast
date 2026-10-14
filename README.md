@@ -172,10 +172,10 @@ Found a bug or want a feature? Open an [issue](https://github.com/CodeMateo15/ar
 ## Credits
 
 Supported by the Boston Public Health Commission, Columbus Public Health, the
-PEAK Trailblazer fellowship, and Prof. Ariel Hamlin (Northeastern University).
+PEAK Trailblazer fellowship, Prof. Ariel Hamlin, Prof. Deahan Yu, and Prof. Rajagopal Venkatesaramani (Northeastern University).
 Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0). Your
 data stays with you: the only network call is the optional weather fetch.
 
 ## Contact
 
-Mateo Biggs, biggs.m@northeastern.edu
+Mateo Biggs (biggs.m@northeastern.edu) or Atharva Nilapwar (nilapwar.a@northeastern.edu).
