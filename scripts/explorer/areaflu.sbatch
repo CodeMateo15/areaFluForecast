@@ -19,6 +19,17 @@
 #   bt=$(sbatch --parsable --export=ALL,MODE=live_backtest,CITY=boston --array=0-11 scripts/explorer/areaflu.sbatch)
 #   fc=$(sbatch --parsable --export=ALL,MODE=live_forecast,CITY=boston --array=1-4 scripts/explorer/areaflu.sbatch)
 #   sbatch --export=ALL,MODE=live_assemble,CITY=boston --dependency=afterok:$bt:$fc scripts/explorer/areaflu.sbatch
+# LIVE_ARGS goes through to live_forecast.py, e.g. a missed week or one new model:
+#   sbatch --export=ALL,MODE=live_forecast,CITY=chicago,LIVE_ARGS="--as-of 2026-09-27" --array=1-4 ...
+#
+# Season-start graph models for --models-dir (live_forecast.py train), one task per horizon;
+# they land in live/models/<season>/<city>/:
+#   sbatch --export=ALL,MODE=live_train,CITY=boston --array=1-4 scripts/explorer/areaflu.sbatch
+#
+# Frozen-model check (scripts/frozen_check.py): 12 season tasks + one per 2025-26 flu week.
+# Weekly tasks retrain all 4 horizons, so give them more time:
+#   sbatch --export=ALL,MODE=exp_frozen --array=0-11 scripts/explorer/areaflu.sbatch
+#   sbatch --export=ALL,MODE=exp_frozen --array=12-37 --time=10:00:00 scripts/explorer/areaflu.sbatch
 #
 # Training-window experiment (scripts/training_window.py): COVID in/out x refit, 32 tasks.
 #   sbatch --export=ALL,MODE=exp_window --array=0-31 scripts/explorer/areaflu.sbatch
@@ -37,7 +48,7 @@
 #SBATCH --error=logs/areaflu_%x_%A_%a.err
 set -euo pipefail
 
-MODE="${MODE:?MODE=parity|pretrain|transfer|live_backtest|live_forecast|live_assemble|exp_window}"
+MODE="${MODE:?MODE=parity|pretrain|transfer|live_backtest|live_forecast|live_assemble|live_train|exp_window|exp_frozen}"
 PKG="${AREAFLU_ROOT:-/scratch/$USER/areaFluForecast}"
 export AREAFLU_RESEARCH_REPO="${AREAFLU_RESEARCH_REPO:-/scratch/$USER/gnn-flu}"
 ENVDIR="${GNNFLU_ENV:-$HOME/envs/gnn-flu}"
@@ -59,9 +70,11 @@ case "$MODE" in
   parity)   python -u scripts/parity/run_parity.py run --index "$SLURM_ARRAY_TASK_ID" --out "$OUT/parity" ;;
   pretrain) python -u scripts/pretrained/train_pretrained.py train --horizon "$SLURM_ARRAY_TASK_ID" --out "$OUT/pretrained" ;;
   transfer) python -u scripts/pretrained/train_pretrained.py transfer --horizon "$SLURM_ARRAY_TASK_ID" --out "$OUT/pretrained" ;;
-  live_backtest) python -u scripts/live_forecast.py backtest-part --city "${CITY:?}" --index "$SLURM_ARRAY_TASK_ID" ;;
-  live_forecast) python -u scripts/live_forecast.py forecast-part --city "${CITY:?}" --horizon "$SLURM_ARRAY_TASK_ID" ;;
-  live_assemble) python -u scripts/live_forecast.py assemble --city "${CITY:?}" ;;
+  live_backtest) python -u scripts/live_forecast.py backtest-part --city "${CITY:?}" --index "$SLURM_ARRAY_TASK_ID" ${LIVE_ARGS:-} ;;
+  live_forecast) python -u scripts/live_forecast.py forecast-part --city "${CITY:?}" --horizon "$SLURM_ARRAY_TASK_ID" ${LIVE_ARGS:-} ;;
+  live_assemble) python -u scripts/live_forecast.py assemble --city "${CITY:?}" ${LIVE_ARGS:-} ;;
+  live_train) python -u scripts/live_forecast.py train --city "${CITY:?}" --models gnn_st --horizon "$SLURM_ARRAY_TASK_ID" ${LIVE_ARGS:-} ;;
   exp_window) python -u scripts/training_window.py run-part --index "$SLURM_ARRAY_TASK_ID" ;;
+  exp_frozen) python -u scripts/frozen_check.py run-part --index "$SLURM_ARRAY_TASK_ID" ;;
   *) echo "unknown MODE=$MODE" >&2; exit 2 ;;
 esac

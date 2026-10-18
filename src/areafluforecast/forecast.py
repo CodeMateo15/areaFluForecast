@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from .backtest import DEFAULT_RUN_DIR, BacktestResult, latest_backtest
-from .checkpoint import InitSource, describe_init, load_init, save_checkpoint
+from .backtest import DEFAULT_RUN_DIR, BacktestResult, data_fingerprint, latest_backtest
+from .checkpoint import Checkpoint, InitSource, describe_init, load_init, save_checkpoint
 from .city import City
-from .configs import DEFAULT_MODELS, ModelConfig, is_learned, resolve, to_json, with_seed
+from .configs import DEFAULT_MODELS, GNNConfig, ModelConfig, is_learned, resolve, to_json, with_seed
 from .engine import run_model, units
 from .errors import DataError, TrustWarning
 from .formats import check, stamp
@@ -180,6 +180,7 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
              backtest: BacktestResult | str | Path | None = "latest",
              init_from: InitSource | None = None, zero_shot: bool = False,
              seed: int | None = None, out_dir: str | Path | None = DEFAULT_RUN_DIR, save_models: bool = False,
+             anchor: str | pd.Timestamp | None = None, frozen: str | Path | None = None,
              progress: bool = True, device: str | None = None) -> ForecastResult:
     """Forecast 1..max(horizons) weeks past the last observed week.
 
@@ -194,6 +195,15 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
     out_dir    where the run is saved, as <out_dir>/<city name>/forecast_<time>/;
                None saves nothing (and looks up no backtest).
     save_models  also save each trained model there, as models/<model>_h<h>.pt.
+    anchor     train on the weeks before this date instead of before the first
+               forecast week, as backtest() does for the season starting then
+               (e.g. city.season_window(year)[0]). Saved with save_models, these
+               are the models `frozen` reuses.
+    frozen     a folder of <model>_h<h>.pt files saved with `anchor`: each graph
+               model in `models` is loaded from it instead of trained, with the
+               split, scaling and seasonal baseline of its anchor, so the forecast
+               is the one retraining with that anchor would give. Other models
+               train as usual.
     device     "cpu" (the default) or e.g. "cuda".
     """
     configs = configs or {}
@@ -209,6 +219,9 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
         # matches this forecast to the pretrained model's own backtest verdict.
         resolved["pretrained"] = resolve(init.config, configs.get("pretrained"))
     resolved = {name: with_seed(config, seed) for name, config in resolved.items()}
+    horizons_frozen = load_frozen(frozen, city, resolved, horizons) if frozen is not None else {}
+    if horizons_frozen and tune:
+        raise ValueError("frozen models keep the settings they were trained with; tune=False.")
 
     last = city.rates.index.max()
     if city.rates.loc[last].isna().all():
@@ -218,6 +231,11 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
     extended = pd.concat([city.rates, pd.DataFrame(np.nan, index=future, columns=city.areas)])
     extended.index.name = city.rates.index.name
     origin = len(city.rates) - 1
+    if anchor is not None:
+        anchor = pd.Timestamp(anchor)
+        if anchor > future[0]:
+            raise ValueError(f"anchor {anchor.date()} is after the first forecast week "
+                             f"({future[0].date()}); the models would train on unseen weeks.")
 
     total = sum(units(c, city.n_areas) + (tuning_units(c) if tune else 0)
                 for c in resolved.values()) * len(horizons)
@@ -229,19 +247,27 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
     for horizon in horizons:
         for name, config in resolved.items():
             use = config
+            start = anchor if anchor is not None else future[0]
             if tune and is_learned(config) and name != "pretrained":
-                use, _ = tune_config(city, config, horizon=horizon, test_start=future[0],
+                use, _ = tune_config(city, config, horizon=horizon, test_start=start,
                                      test_end=future[-1], rates=extended, on_unit=bar.step)
             pretrained = init is not None and name == "pretrained"
-            output = run_model(city, use, horizon=horizon, test_start=future[0], test_end=future[-1],
+            members, features = (init.members[horizon], init.feature_names[horizon]) if pretrained \
+                else (None, None)
+            fixed = horizons_frozen.get((name, horizon))
+            if fixed is not None:
+                start, members, features = fixed.meta["anchor"], fixed.members, fixed.feature_names
+                start = pd.Timestamp(start)
+            output = run_model(city, use, horizon=horizon, test_start=start, test_end=future[-1],
                                rates=extended, only_origin=origin,
-                               init_members=init.members[horizon] if pretrained else None,
-                               init_features=init.feature_names[horizon] if pretrained else None,
-                               zero_shot=zero_shot and pretrained,
+                               init_members=members, init_features=features,
+                               zero_shot=(zero_shot and pretrained) or fixed is not None,
                                on_unit=lambda m, h=horizon: bar.step(f"{h}wk {m}"), device=device)
             frames.append(output.test.assign(model=name))
             chosen[f"{name}|{horizon}"] = to_json(use)
-            if save_models and run_path is not None and is_learned(use):
+            if save_models and run_path is not None and is_learned(use) and fixed is None:
+                output.meta.update({"anchor": str(pd.Timestamp(start).date()),
+                                    "data_fingerprint": data_fingerprint(city, _before(start))})
                 saved.append(str(save_checkpoint(run_path / "models" / f"{name}_h{horizon}.pt",
                                                  output, city_name=city.name, areas=city.areas)))
 
@@ -266,8 +292,59 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
               "configs": chosen, "backtest": str(backtest.path) if backtest is not None else None,
               "saved_models": saved, "created": time.strftime("%Y-%m-%dT%H:%M:%S", started),
               "seed": seed, "tuned": bool(tune),
-              "init_from": describe_init(init_from)})
+              "init_from": describe_init(init_from),
+              "anchor": str(anchor.date()) if anchor is not None else None,
+              "frozen": {f"{n}|{h}": c.digest for (n, h), c in horizons_frozen.items()} or None})
     if run_path is not None:
         result.save(run_path)
         bar.finish(run_path)
     return result
+
+
+def _before(start) -> pd.Timestamp:
+    """The last day before `start`: everything a model anchored there learned from."""
+    return pd.Timestamp(start) - pd.Timedelta(days=1)
+
+
+def load_frozen(folder: str | Path, city: City, resolved: dict, horizons) -> dict:
+    """{(model, horizon): Checkpoint} for each graph model in `resolved`, from
+    <folder>/<model>_h<h>.pt, checked to be the model forecast() would train here:
+    same city and areas, same settings, saved with an anchor, and the same weekly
+    rates before that anchor as it was trained on."""
+    folder = Path(folder)
+    out = {}
+    for name, config in resolved.items():
+        if not isinstance(config, GNNConfig) or name == "pretrained":
+            continue
+        for horizon in horizons:
+            path = folder / f"{name}_h{horizon}.pt"
+            if not path.is_file():
+                raise DataError(f"No saved {name} model for {horizon} weeks ahead in {folder} "
+                                f"(expected {path.name}). Train it with anchor= and save_models=True.")
+            checkpoint = Checkpoint.load(path)
+            where = f"{path}"
+            if checkpoint.horizon != horizon:
+                raise DataError(f"{where} forecasts {checkpoint.horizon} weeks ahead, not {horizon}.")
+            if checkpoint.city != city.name or list(checkpoint.areas) != list(city.areas):
+                raise DataError(f"{where} was trained on {checkpoint.city!r} with other areas; "
+                                f"frozen models must come from this city ({city.name!r}).")
+            if "anchor" not in checkpoint.meta or "data_fingerprint" not in checkpoint.meta:
+                raise DataError(f"{where} was not saved with an anchor; save frozen models with "
+                                "forecast(anchor=..., save_models=True).")
+            theirs, ours = to_json(checkpoint.config), to_json(config)
+            changed = sorted(k for k in set(theirs) | set(ours) if theirs.get(k) != ours.get(k))
+            if changed:
+                raise DataError(f"{where} was trained with other {name} settings "
+                                f"({', '.join(changed)}); retrain it or use its settings.")
+            if getattr(config, "refit", False):
+                raise DataError("frozen models are saved before any refit; use refit=False.")
+            anchor = checkpoint.meta["anchor"]
+            if checkpoint.meta["data_fingerprint"] != data_fingerprint(city, _before(anchor)):
+                raise DataError(f"The weekly rates before {anchor} differ from the ones {where} was "
+                                "trained on (a revised export?). Retrain the frozen models on "
+                                "this data.")
+            out[(name, horizon)] = checkpoint
+    if not out:
+        raise ValueError(f"frozen={folder} applies to graph models (gnn_st, ...), and none is in "
+                         "models.")
+    return out
