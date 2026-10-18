@@ -40,10 +40,10 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
-import tempfile
 import platform
+import shutil
 import sys
+import tempfile
 import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor

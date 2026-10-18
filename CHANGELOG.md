@@ -7,6 +7,8 @@ All notable changes to areaFluForecast are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-18
+
 ### Added
 - A [References](docs/references.md) page listing the papers whose methods the
   package implements, with DOIs and what each is used for. The same papers are
