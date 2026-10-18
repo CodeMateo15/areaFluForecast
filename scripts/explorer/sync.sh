@@ -15,7 +15,7 @@ case "$MODE" in
   push)
     rsync -avz --delete --exclude '.git/' --exclude '.venv/' --exclude '__pycache__/' --exclude '.DS_Store' \
       --exclude 'gate_b/' --exclude 'logs/' --exclude 'areaflu_runs/' \
-      --exclude 'live/runs/' --exclude 'live/[0-9][0-9][0-9][0-9]_[0-9][0-9]/' \
+      --exclude 'live/runs/' --exclude 'live/models/' --exclude 'live/[0-9][0-9][0-9][0-9]_[0-9][0-9]/' \
       "$LOCAL/" "$NUID@$HOST:$REMOTE/"
     ;;
   pull)
@@ -23,7 +23,7 @@ case "$MODE" in
     ;;
   pull-live)
     # Never --delete here: archived forecasts are the prospective record.
-    rsync -avz --include '[0-9][0-9][0-9][0-9]_[0-9][0-9]/***' --include 'runs/***' --exclude '*' \
+    rsync -avz --include '[0-9][0-9][0-9][0-9]_[0-9][0-9]/***' --include 'runs/***' --include 'models/***' --exclude '*' \
       "$NUID@$HOST:$REMOTE/live/" "$LOCAL/live/"
     ;;
   *) echo "usage: sync.sh {push|pull|pull-live} <nuid>" >&2; exit 2 ;;

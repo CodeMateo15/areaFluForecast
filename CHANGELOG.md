@@ -7,11 +7,25 @@ All notable changes to areaFluForecast are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-18
+
 ### Added
 - A [References](docs/references.md) page listing the papers whose methods the
   package implements, with DOIs and what each is used for. The same papers are
   in `CITATION.cff` under `references`, the core ones in the README, and the
   modules that implement each method cite it in their docstrings.
+- `forecast(anchor=...)` trains on the weeks before a date (e.g. the season
+  start) instead of before the first forecast week, as `backtest()` does for
+  that season; with `save_models=True` the saved files also record the anchor
+  and a fingerprint of the rates before it.
+- `forecast(frozen=folder)` loads each graph model from those files instead of
+  training it. The forecast is exactly the one retraining with the same anchor
+  would give (same split, scaling, seasonal baseline and intervals), in seconds
+  rather than hours. It refuses files from another city, other settings, or
+  rates that were revised before the anchor.
+- `scripts/live_forecast.py train` saves the season-start graph models;
+  `run`/`forecast-part`/`assemble --models-dir` load them, and `run --jobs K`
+  forecasts the horizons in K processes.
 
 ## [1.1.0] - 2026-10-13
 

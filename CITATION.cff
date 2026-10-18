@@ -15,8 +15,8 @@ authors:
     given-names: Mateo
     email: biggs.m@northeastern.edu
     affiliation: Northeastern University
-version: 1.1.0
-date-released: "2026-10-13"
+version: 1.2.0
+date-released: "2026-10-18"
 license: MIT
 # The concept DOI: resolves to the latest version on Zenodo.
 doi: 10.5281/zenodo.23327109

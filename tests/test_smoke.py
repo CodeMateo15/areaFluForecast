@@ -179,3 +179,57 @@ def test_cli_forecast_with_bundled_boston_models(tmp_path, capsys):
     assert set(result.table["model"]) == {"pretrained", "persistence"}
     assert set(result.table["horizon"]) == {1, 2}
     assert result.meta["init_from"]["1"].endswith("gnn_st_noadapt_h1.pt")
+
+
+def _as_of(city, week):
+    from dataclasses import replace
+    weather = {k: v.loc[:week] for k, v in city.weather.items()} if city.weather else None
+    return replace(city, rates=city.rates.loc[:week], weather=weather)
+
+
+@pytest.fixture(scope="module")
+def frozen_setup(city, tmp_path_factory):
+    """gnn_st trained once with a season-start anchor, saved, plus the data 10 weeks later."""
+    tiny = {"gnn_st": {"n_seeds": 2, "epochs": 2, "mc_samples": 4}}
+    year = city.complete_seasons()[-1]
+    anchor = city.season_window(year)[0]
+    weeks = city.rates.index[city.rates.index >= anchor]
+    early, late = _as_of(city, weeks[5]), _as_of(city, weeks[15])
+    first = af.forecast(early, ("gnn_st",), horizons=(1, 2), configs=tiny, anchor=anchor,
+                        save_models=True, out_dir=tmp_path_factory.mktemp("frozen"),
+                        backtest=None, progress=False)
+    folder = first.path / "models"
+    return tiny, anchor, early, late, first, folder
+
+
+def test_frozen_equals_retraining_with_its_anchor(frozen_setup):
+    """Loading the saved weights gives exactly the forecast retraining would, at any later week."""
+    tiny, anchor, early, late, first, folder = frozen_setup
+    columns = ["origin_date", "target_date", "horizon", "area", "predicted", "lower", "upper",
+               *QUANTILE_COLUMNS]
+    same_week = af.forecast(early, ("gnn_st",), horizons=(1, 2), configs=tiny, frozen=folder,
+                            backtest=None, out_dir=None, progress=False)
+    pd.testing.assert_frame_equal(same_week.table[columns], first.table[columns])
+    loaded = af.forecast(late, ("gnn_st",), horizons=(1, 2), configs=tiny, frozen=folder,
+                         backtest=None, out_dir=None, progress=False)
+    retrained = af.forecast(late, ("gnn_st",), horizons=(1, 2), configs=tiny, anchor=anchor,
+                            backtest=None, out_dir=None, progress=False)
+    pd.testing.assert_frame_equal(loaded.table[columns], retrained.table[columns])
+    assert set(loaded.table["model"]) == {"gnn_st"} and loaded.meta["frozen"]
+    assert loaded.table["origin_date"].max() > first.table["origin_date"].max()
+
+
+def test_frozen_refuses_other_settings_or_revised_history(frozen_setup):
+    from dataclasses import replace
+    tiny, anchor, early, late, first, folder = frozen_setup
+    with pytest.raises(af.DataError, match="other gnn_st settings"):
+        af.forecast(late, ("gnn_st",), horizons=(1, 2), configs={"gnn_st": {"n_seeds": 3}},
+                    frozen=folder, backtest=None, out_dir=None, progress=False)
+    with pytest.raises(af.DataError, match="No saved gnn_st model for 3 weeks"):
+        af.forecast(late, ("gnn_st",), horizons=(1, 3), configs=tiny, frozen=folder,
+                    backtest=None, out_dir=None, progress=False)
+    revised = late.rates.copy()
+    revised.iloc[10, 0] += 1.0
+    with pytest.raises(af.DataError, match="revised export"):
+        af.forecast(replace(late, rates=revised), ("gnn_st",), horizons=(1, 2), configs=tiny,
+                    frozen=folder, backtest=None, out_dir=None, progress=False)

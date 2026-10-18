@@ -6,6 +6,12 @@
     # all in one (local, or AREAFLU_QUICK=1 smoke test)
     python scripts/live_forecast.py run --city boston
 
+    # faster weekly runs: train the graph model once at season start (heavy, ~2 h),
+    # then every week load it instead of retraining (minutes; same numbers as
+    # retraining from the season start, which is what the backtest scores)
+    python scripts/live_forecast.py train --city boston            # or --horizon 1..4 per task
+    python scripts/live_forecast.py run --city boston --models-dir live/models/2026_27/boston
+
     # on Explorer, as array tasks (scripts/explorer/areaflu.sbatch MODE=live_*):
     python scripts/live_forecast.py backtest-part --city boston --index 0..11
     python scripts/live_forecast.py forecast-part --city boston --horizon 1..4
@@ -17,6 +23,7 @@ Layout under --root (default live/):
     <city>/                         the data, as export_sample.py --out writes it
     runs/<city>/backtest_*          the trust-check backtest, reused until the seasons change
     runs/<city>/parts/              per-task pieces before `assemble`
+    models/<season>/<city>/         `train` output: gnn_st_h<h>.pt + manifest.json
     <season>/<city>/<origin>/       one frozen folder per forecast: forecast.csv,
                                     forecast_flusight.csv, trust.md, rates_asof.csv, meta.json,
                                     runtime.csv (seconds per model and horizon)
@@ -30,12 +37,16 @@ alongside the models so each week has its "same as last week" reference.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
+import shutil
 import sys
+import tempfile
 import time
 import warnings
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -44,7 +55,7 @@ import pandas as pd
 
 import areafluforecast as af
 from areafluforecast.backtest import BacktestResult, combine
-from areafluforecast.configs import DEFAULT_MODELS
+from areafluforecast.configs import DEFAULT_MODELS, GNNConfig
 from areafluforecast.engine import make_split, make_window
 from areafluforecast.forecast import _trust
 from areafluforecast.scoring import add_cell_scores
@@ -67,9 +78,45 @@ def load(args) -> af.City:
     return city
 
 
+def season_year(city: af.City, week: pd.Timestamp) -> int:
+    return week.year if week >= city.season_window(week.year)[0] else week.year - 1
+
+
 def season_of(city: af.City, week: pd.Timestamp) -> str:
-    year = week.year if week >= city.season_window(week.year)[0] else week.year - 1
-    return city.season_label(year).replace("-", "_")
+    return city.season_label(season_year(city, week)).replace("-", "_")
+
+
+def season_start(city: af.City) -> pd.Timestamp:
+    """Where the live season's scored window opens: the anchor `train` uses, as the
+    backtest does for each past season."""
+    return city.season_window(season_year(city, city.rates.index.max()))[0]
+
+
+def graph_models(models) -> list[str]:
+    """The models `train` saves and --models-dir loads (the slow ones)."""
+    return [m for m in models if isinstance(af.resolve(m), GNNConfig)]
+
+
+def check_models_dir(args, city: af.City) -> Path | None:
+    """--models-dir, checked to hold this season's frozen models for every graph model
+    and horizon. Fails rather than quietly retraining."""
+    if not getattr(args, "models_dir", None):
+        return None
+    folder = Path(args.models_dir)
+    manifest = folder / "manifest.json"
+    if not manifest.is_file():
+        raise SystemExit(f"{manifest} not found. Run `live_forecast.py train` first.")
+    info = json.loads(manifest.read_text())
+    season = season_of(city, city.rates.index.max())
+    if info.get("season") != season or info.get("city") != args.city:
+        raise SystemExit(f"{folder} holds {info.get('city')} {info.get('season')} models, but this "
+                         f"forecast is {args.city} {season}. Retrain for the new season with "
+                         "`live_forecast.py train`.")
+    missing = [f"{m}_h{h}.pt" for m in graph_models(args.models) for h in HORIZONS
+               if not (folder / f"{m}_h{h}.pt").is_file()]
+    if missing:
+        raise SystemExit(f"{folder} is missing {missing}. Run `live_forecast.py train`.")
+    return folder
 
 
 def trust_seasons(args, city: af.City) -> list[int]:
@@ -102,10 +149,22 @@ def machine() -> str:
     return f"{name} {platform.machine()}, {os.cpu_count()} CPUs"
 
 
-def timed_forecast(city: af.City, models, horizons, configs: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def timed_forecast(city: af.City, models, horizons, configs: dict, frozen: Path | None = None,
+                   jobs: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
     """af.forecast one model and horizon at a time, timing each. Each config carries
-    its own seed, so the numbers match a single call with every model. The trust
-    check is left to archive(), which has the backtest."""
+    its own seed, so the numbers match a single call with every model, and running
+    horizons in `jobs` parallel processes changes nothing but the wall time. Graph
+    models are loaded from `frozen` when given. The trust check is left to
+    archive(), which has the backtest."""
+    horizons = list(horizons)
+    if jobs > 1 and len(horizons) > 1:
+        with ProcessPoolExecutor(max_workers=min(jobs, len(horizons))) as pool:
+            parts = list(pool.map(timed_forecast, [city] * len(horizons), [models] * len(horizons),
+                                  [(h,) for h in horizons], [configs] * len(horizons),
+                                  [frozen] * len(horizons)))
+        return (pd.concat([t for t, _ in parts], ignore_index=True),
+                pd.concat([r for _, r in parts], ignore_index=True))
+    loaded = set(graph_models(models)) if frozen is not None else set()
     frames, rows = [], []
     for horizon in horizons:
         for model in models:
@@ -113,24 +172,29 @@ def timed_forecast(city: af.City, models, horizons, configs: dict) -> tuple[pd.D
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", af.TrustWarning)
                 fc = af.forecast(city, (model,), horizons=(horizon,), configs=configs, backtest=None,
-                                 out_dir=None)
+                                 out_dir=None, frozen=frozen if model in loaded else None)
             seconds = time.perf_counter() - started
             frames.append(fc.table)
             config = af.resolve(model, configs.get(model))
             rows.append({"model": model, "horizon": horizon, "seconds": round(seconds, 2),
                          "n_seeds": getattr(config, "n_seeds", None),
-                         "epochs": getattr(config, "epochs", None), "machine": machine()})
-            print(f"{model} {horizon} wk: {seconds:.1f}s", flush=True)
+                         "epochs": 0 if model in loaded else getattr(config, "epochs", None),
+                         "loaded": model in loaded, "machine": machine()})
+            print(f"{model} {horizon} wk: {seconds:.1f}s{' (loaded)' if model in loaded else ''}",
+                  flush=True)
     return pd.concat(frames, ignore_index=True), pd.DataFrame(rows)
 
 
-def training_window(city: af.City, model: str = "gnn_st", horizon: int = 1) -> dict:
+def training_window(city: af.City, model: str = "gnn_st", horizon: int = 1,
+                    anchor: pd.Timestamp | None = None) -> dict:
     """The target weeks one model learned from and held out, by the same split
-    forecast() uses, so the app can say which seasons are training seasons."""
+    forecast() uses (anchored at the season start for frozen models), so the app
+    can say which seasons are training seasons."""
     last = city.rates.index.max()
     future = pd.date_range(last + pd.Timedelta(days=7), periods=max(HORIZONS), freq="7D")
     index = city.rates.index.append(future)
-    window = make_window(af.resolve(model), horizon, future[0], future[-1])
+    window = make_window(af.resolve(model), horizon, future[0] if anchor is None else anchor,
+                         future[-1])
     split = make_split(index, window, only_origin=len(city.rates) - 1)
     span = lambda origins: [str(index[origins[0] + horizon].date()),
                             str(index[origins[-1] + horizon].date())]
@@ -139,7 +203,7 @@ def training_window(city: af.City, model: str = "gnn_st", horizon: int = 1) -> d
 
 
 def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick: bool,
-            runtime: pd.DataFrame | None = None) -> Path:
+            runtime: pd.DataFrame | None = None, frozen: Path | None = None) -> Path:
     """Write the frozen forecast folder. Never overwrites without --force."""
     origin = city.rates.index.max()
     season = season_of(city, origin)
@@ -168,7 +232,9 @@ def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick:
         "city": args.city, "label": city.label, "season": season,
         "origin": str(origin.date()), "horizons": list(HORIZONS), "models": list(args.models),
         "backtest": str(bt.path), "backtest_seasons": bt.meta.get("season_labels"),
-        "training": training_window(city),
+        "training": training_window(city, anchor=season_start(city) if frozen else None),
+        "frozen_models": (json.loads((frozen / "manifest.json").read_text())
+                          if frozen is not None else None),
         "issued": time.strftime("%Y-%m-%dT%H:%M:%S"), "quick": quick}, indent=2) + "\n")
     print(f"Outputs: {folder}", flush=True)
     return folder
@@ -179,6 +245,7 @@ def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick:
 def run(args) -> None:
     city = load(args)
     print(city.summary(), flush=True)
+    frozen = check_models_dir(args, city)
     configs = quick_configs(args.models)
     seasons = trust_seasons(args, city)
     runs = Path(args.root) / "runs"
@@ -189,8 +256,8 @@ def run(args) -> None:
                          out_dir=runs)
     else:
         print(f"Reusing backtest {bt.path}", flush=True)
-    table, runtime = timed_forecast(city, args.models, HORIZONS, configs)
-    archive(args, city, table, bt, bool(configs), runtime)
+    table, runtime = timed_forecast(city, args.models, HORIZONS, configs, frozen, args.jobs)
+    archive(args, city, table, bt, bool(configs), runtime, frozen)
 
 
 def backtest_part(args) -> None:
@@ -207,11 +274,44 @@ def backtest_part(args) -> None:
     print(f"Outputs: {out}", flush=True)
 
 
+def train(args) -> None:
+    """Train each graph model on the weeks before the live season starts and save it
+    for --models-dir: the same training the backtest gives each past season."""
+    city = load(args)
+    print(city.summary(), flush=True)
+    models = graph_models(args.models)
+    if not models:
+        raise SystemExit(f"None of {list(args.models)} is a graph model; nothing to train.")
+    origin = city.rates.index.max()
+    season, anchor = season_of(city, origin), season_start(city)
+    out = Path(args.out or Path(args.root) / "models" / season / args.city)
+    horizons = (args.horizon,) if args.horizon else HORIZONS
+    print(f"Training {models} for {season}, on the weeks before {anchor.date()}", flush=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        fc = af.forecast(city, models, horizons=horizons, configs=quick_configs(models),
+                         anchor=anchor, save_models=True, backtest=None, out_dir=tmp)
+        out.mkdir(parents=True, exist_ok=True)
+        for saved in fc.meta["saved_models"]:
+            shutil.copy2(saved, out / Path(saved).name)
+    files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(out.glob("*.pt"))}
+    manifest = {"city": args.city, "season": season, "anchor": str(anchor.date()),
+                "trained_through": str(origin.date()), "models": models,
+                "package_version": af.__version__, "quick": bool(quick_configs(models)),
+                "files": files, "updated": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    # Array tasks finish one horizon each; the last to finish lists them all.
+    partial = out / f".manifest.{os.getpid()}.json"
+    partial.write_text(json.dumps(manifest, indent=2) + "\n")
+    partial.replace(out / "manifest.json")
+    print(f"Outputs: {out}", flush=True)
+
+
 def forecast_part(args) -> None:
     city = load(args)
+    frozen = check_models_dir(args, city)
     origin = str(city.rates.index.max().date())
     out = Path(args.root) / "runs" / args.city / "parts" / origin / f"fc_h{args.horizon}.csv"
-    table, runtime = timed_forecast(city, args.models, (args.horizon,), quick_configs(args.models))
+    table, runtime = timed_forecast(city, args.models, (args.horizon,), quick_configs(args.models),
+                                    frozen)
     out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(out, index=False)
     runtime.to_csv(out.parent / f"runtime_h{args.horizon}.csv", index=False)
@@ -248,7 +348,8 @@ def assemble(args) -> None:
     timings = [parts_dir / origin / f"runtime_h{h}.csv" for h in HORIZONS]
     runtime = (pd.concat([pd.read_csv(f) for f in timings], ignore_index=True)
                if all(f.exists() for f in timings) else None)
-    archive(args, city, table, bt, bool(quick_configs(args.models)), runtime)
+    archive(args, city, table, bt, bool(quick_configs(args.models)), runtime,
+            check_models_dir(args, city))
     print(bt.report(show=False))
 
 
@@ -287,8 +388,8 @@ def score(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    commands = {"run": run, "backtest-part": backtest_part, "forecast-part": forecast_part,
-                "assemble": assemble, "score": score}
+    commands = {"run": run, "train": train, "backtest-part": backtest_part,
+                "forecast-part": forecast_part, "assemble": assemble, "score": score}
     for name in commands:
         p = sub.add_parser(name)
         p.add_argument("--city", required=True)
@@ -306,6 +407,16 @@ def main() -> None:
             p.add_argument("--index", type=int, required=True)
         if name == "forecast-part":
             p.add_argument("--horizon", type=int, required=True, choices=HORIZONS)
+        if name == "train":
+            p.add_argument("--horizon", type=int, choices=HORIZONS,
+                           help="train one horizon (one array task); default all four")
+            p.add_argument("--out", help="default <root>/models/<season>/<city>")
+        if name in ("run", "forecast-part", "assemble"):
+            p.add_argument("--models-dir", help="load the graph models `train` saved here instead "
+                           "of retraining them")
+        if name == "run":
+            p.add_argument("--jobs", type=int, default=1,
+                           help="forecast the horizons in this many processes (same numbers)")
     args = parser.parse_args()
     commands[args.command](args)
 
