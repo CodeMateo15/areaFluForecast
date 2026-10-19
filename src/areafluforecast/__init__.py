@@ -34,8 +34,8 @@ from .configs import (
     resolve,
 )
 from .datasets import load_city, load_sample, save_city
-from .errors import DataError, DataWarning, TrustWarning
 from .drivers import explain
+from .errors import DataError, DataWarning, TrustWarning
 from .forecast import ForecastResult, forecast
 
 __version__ = "1.2.0"

@@ -374,7 +374,8 @@ def explain(args) -> None:
     drivers.csv (+ drivers.json) beside the newest archived forecast. Weeks explained
     in an earlier folder with the same saved models are copied from it, so each week
     only the new origin is computed."""
-    from areafluforecast.drivers import METHOD, explain as explain_frozen
+    from areafluforecast.drivers import METHOD
+    from areafluforecast.drivers import explain as explain_frozen
 
     city = load(args)
     frozen = check_models_dir(argparse.Namespace(**{**vars(args), "models": ["gnn_st"]}), city)
