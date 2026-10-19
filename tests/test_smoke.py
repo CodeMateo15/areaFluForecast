@@ -233,3 +233,31 @@ def test_frozen_refuses_other_settings_or_revised_history(frozen_setup):
     with pytest.raises(af.DataError, match="revised export"):
         af.forecast(replace(late, rates=revised), ("gnn_st",), horizons=(1, 2), configs=tiny,
                     frozen=folder, backtest=None, out_dir=None, progress=False)
+
+
+def test_frozen_sequence_and_arima_equal_retraining(city, tmp_path_factory):
+    """LSTM, Cola-GNN and ARIMA load as the graph model does: the saved fit gives the
+    forecast refitting from the same anchor would, without the training or order search."""
+    tiny = {"lstm": {"n_seeds": 2, "epochs": 2}, "colagnn": {"n_seeds": 1, "epochs": 2},
+            "arima": {"max_p": 2, "max_d": 1, "max_q": 1}}
+    models = ("lstm", "colagnn", "arima")
+    columns = ["origin_date", "target_date", "horizon", "area", "predicted", "lower", "upper",
+               *QUANTILE_COLUMNS]
+    year = city.complete_seasons()[-1]
+    anchor = city.season_window(year)[0]
+    weeks = city.rates.index[city.rates.index >= anchor]
+    early, late = _as_of(city, weeks[5]), _as_of(city, weeks[15])
+    first = af.forecast(early, models, horizons=(1, 2), configs=tiny, anchor=anchor,
+                        save_models=True, out_dir=tmp_path_factory.mktemp("frozen_seq"),
+                        backtest=None, progress=False)
+    folder = first.path / "models"
+    assert {p.name for p in folder.glob("*.pt")} == {f"{m}_h{h}.pt" for m in models for h in (1, 2)}
+    loaded = af.forecast(late, models, horizons=(1, 2), configs=tiny, frozen=folder,
+                         backtest=None, out_dir=None, progress=False)
+    retrained = af.forecast(late, models, horizons=(1, 2), configs=tiny, anchor=anchor,
+                            backtest=None, out_dir=None, progress=False)
+    key = ["model", "horizon", "area"]
+    pd.testing.assert_frame_equal(
+        loaded.table.sort_values(key)[columns].reset_index(drop=True),
+        retrained.table.sort_values(key)[columns].reset_index(drop=True))
+    assert set(loaded.meta["frozen"]) == {f"{m}|{h}" for m in models for h in (1, 2)}

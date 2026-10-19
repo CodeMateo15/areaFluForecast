@@ -22,7 +22,16 @@ import pandas as pd
 from .backtest import DEFAULT_RUN_DIR, BacktestResult, data_fingerprint, latest_backtest
 from .checkpoint import Checkpoint, InitSource, describe_init, load_init, save_checkpoint
 from .city import City
-from .configs import DEFAULT_MODELS, GNNConfig, ModelConfig, is_learned, resolve, to_json, with_seed
+from .configs import (
+    DEFAULT_MODELS,
+    ArimaConfig,
+    ModelConfig,
+    is_freezable,
+    is_learned,
+    resolve,
+    to_json,
+    with_seed,
+)
 from .engine import run_model, units
 from .errors import DataError, TrustWarning
 from .formats import check, stamp
@@ -199,11 +208,11 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
                forecast week, as backtest() does for the season starting then
                (e.g. city.season_window(year)[0]). Saved with save_models, these
                are the models `frozen` reuses.
-    frozen     a folder of <model>_h<h>.pt files saved with `anchor`: each graph
-               model in `models` is loaded from it instead of trained, with the
+    frozen     a folder of <model>_h<h>.pt files saved with `anchor`: each model in
+               `models` but the baselines is loaded from it instead of trained
+               (ARIMA keeps its saved orders and refits on the new weeks), with the
                split, scaling and seasonal baseline of its anchor, so the forecast
-               is the one retraining with that anchor would give. Other models
-               train as usual.
+               is the one retraining with that anchor would give.
     device     "cpu" (the default) or e.g. "cuda".
     """
     configs = configs or {}
@@ -255,17 +264,20 @@ def forecast(city: City, models: Sequence[str | ModelConfig] = DEFAULT_MODELS, *
             members, features = (init.members[horizon], init.feature_names[horizon]) if pretrained \
                 else (None, None)
             fixed = horizons_frozen.get((name, horizon))
+            orders = None
             if fixed is not None:
                 start, members, features = fixed.meta["anchor"], fixed.members, fixed.feature_names
                 start = pd.Timestamp(start)
+                if isinstance(use, ArimaConfig):
+                    orders = fixed.meta["selected_orders"]
             output = run_model(city, use, horizon=horizon, test_start=start, test_end=future[-1],
                                rates=extended, only_origin=origin,
-                               init_members=members, init_features=features,
+                               init_members=members, init_features=features, arima_orders=orders,
                                zero_shot=(zero_shot and pretrained) or fixed is not None,
                                on_unit=lambda m, h=horizon: bar.step(f"{h}wk {m}"), device=device)
             frames.append(output.test.assign(model=name))
             chosen[f"{name}|{horizon}"] = to_json(use)
-            if save_models and run_path is not None and is_learned(use) and fixed is None:
+            if save_models and run_path is not None and is_freezable(use) and fixed is None:
                 output.meta.update({"anchor": str(pd.Timestamp(start).date()),
                                     "data_fingerprint": data_fingerprint(city, _before(start))})
                 saved.append(str(save_checkpoint(run_path / "models" / f"{name}_h{horizon}.pt",
@@ -307,14 +319,14 @@ def _before(start) -> pd.Timestamp:
 
 
 def load_frozen(folder: str | Path, city: City, resolved: dict, horizons) -> dict:
-    """{(model, horizon): Checkpoint} for each graph model in `resolved`, from
+    """{(model, horizon): Checkpoint} for each model in `resolved` but the baselines, from
     <folder>/<model>_h<h>.pt, checked to be the model forecast() would train here:
     same city and areas, same settings, saved with an anchor, and the same weekly
     rates before that anchor as it was trained on."""
     folder = Path(folder)
     out = {}
     for name, config in resolved.items():
-        if not isinstance(config, GNNConfig) or name == "pretrained":
+        if not is_freezable(config) or name == "pretrained":
             continue
         for horizon in horizons:
             path = folder / f"{name}_h{horizon}.pt"
@@ -336,6 +348,8 @@ def load_frozen(folder: str | Path, city: City, resolved: dict, horizons) -> dic
             if changed:
                 raise DataError(f"{where} was trained with other {name} settings "
                                 f"({', '.join(changed)}); retrain it or use its settings.")
+            if isinstance(config, ArimaConfig) and "selected_orders" not in checkpoint.meta:
+                raise DataError(f"{where} has no ARIMA orders; save it with save_models=True.")
             if getattr(config, "refit", False):
                 raise DataError("frozen models are saved before any refit; use refit=False.")
             anchor = checkpoint.meta["anchor"]
@@ -345,6 +359,6 @@ def load_frozen(folder: str | Path, city: City, resolved: dict, horizons) -> dic
                                 "this data.")
             out[(name, horizon)] = checkpoint
     if not out:
-        raise ValueError(f"frozen={folder} applies to graph models (gnn_st, ...), and none is in "
-                         "models.")
+        raise ValueError(f"frozen={folder} applies to fitted models (gnn_st, lstm, arima, ...), and "
+                         "none is in models.")
     return out

@@ -6,11 +6,16 @@
     # all in one (local, or AREAFLU_QUICK=1 smoke test)
     python scripts/live_forecast.py run --city boston
 
-    # faster weekly runs: train the graph model once at season start (heavy, ~2 h),
-    # then every week load it instead of retraining (minutes; same numbers as
+    # faster weekly runs: train every model once at season start (heavy, ~2.5 h; or
+    # --models lstm colagnn arima to add to a folder that already holds gnn_st),
+    # then every week load them instead of retraining (minutes; same numbers as
     # retraining from the season start, which is what the backtest scores)
     python scripts/live_forecast.py train --city boston            # or --horizon 1..4 per task
     python scripts/live_forecast.py run --city boston --models-dir live/models/2026_27/boston
+
+    # what drove the graph model's forecast (drivers.csv in the newest archive folder;
+    # weeks explained before are reused from the previous folder)
+    python scripts/live_forecast.py explain --city boston --models-dir live/models/2026_27/boston
 
     # on Explorer, as array tasks (scripts/explorer/areaflu.sbatch MODE=live_*):
     python scripts/live_forecast.py backtest-part --city boston --index 0..11
@@ -23,10 +28,11 @@ Layout under --root (default live/):
     <city>/                         the data, as export_sample.py --out writes it
     runs/<city>/backtest_*          the trust-check backtest, reused until the seasons change
     runs/<city>/parts/              per-task pieces before `assemble`
-    models/<season>/<city>/         `train` output: gnn_st_h<h>.pt + manifest.json
+    models/<season>/<city>/         `train` output: <model>_h<h>.pt + manifest.json
     <season>/<city>/<origin>/       one frozen folder per forecast: forecast.csv,
                                     forecast_flusight.csv, trust.md, rates_asof.csv, meta.json,
-                                    runtime.csv (seconds per model and horizon)
+                                    runtime.csv (seconds per model and horizon),
+                                    drivers.csv + drivers.json (`explain`)
     <season>/<city>/scores.csv      every archived forecast joined to what happened
 
 This track is separate from the paper's backtest: its forecasts are written once and
@@ -55,7 +61,7 @@ import pandas as pd
 
 import areafluforecast as af
 from areafluforecast.backtest import BacktestResult, combine
-from areafluforecast.configs import DEFAULT_MODELS, GNNConfig
+from areafluforecast.configs import DEFAULT_MODELS, is_freezable
 from areafluforecast.engine import make_split, make_window
 from areafluforecast.forecast import _trust
 from areafluforecast.scoring import add_cell_scores
@@ -92,13 +98,13 @@ def season_start(city: af.City) -> pd.Timestamp:
     return city.season_window(season_year(city, city.rates.index.max()))[0]
 
 
-def graph_models(models) -> list[str]:
-    """The models `train` saves and --models-dir loads (the slow ones)."""
-    return [m for m in models if isinstance(af.resolve(m), GNNConfig)]
+def saved_models(models) -> list[str]:
+    """The models `train` saves and --models-dir loads: all but the baselines."""
+    return [m for m in models if is_freezable(af.resolve(m))]
 
 
 def check_models_dir(args, city: af.City) -> Path | None:
-    """--models-dir, checked to hold this season's frozen models for every graph model
+    """--models-dir, checked to hold this season's frozen models for every saved model
     and horizon. Fails rather than quietly retraining."""
     if not getattr(args, "models_dir", None):
         return None
@@ -112,7 +118,7 @@ def check_models_dir(args, city: af.City) -> Path | None:
         raise SystemExit(f"{folder} holds {info.get('city')} {info.get('season')} models, but this "
                          f"forecast is {args.city} {season}. Retrain for the new season with "
                          "`live_forecast.py train`.")
-    missing = [f"{m}_h{h}.pt" for m in graph_models(args.models) for h in HORIZONS
+    missing = [f"{m}_h{h}.pt" for m in saved_models(args.models) for h in HORIZONS
                if not (folder / f"{m}_h{h}.pt").is_file()]
     if missing:
         raise SystemExit(f"{folder} is missing {missing}. Run `live_forecast.py train`.")
@@ -164,7 +170,7 @@ def timed_forecast(city: af.City, models, horizons, configs: dict, frozen: Path 
                                   [frozen] * len(horizons)))
         return (pd.concat([t for t, _ in parts], ignore_index=True),
                 pd.concat([r for _, r in parts], ignore_index=True))
-    loaded = set(graph_models(models)) if frozen is not None else set()
+    loaded = set(saved_models(models)) if frozen is not None else set()
     frames, rows = [], []
     for horizon in horizons:
         for model in models:
@@ -275,13 +281,13 @@ def backtest_part(args) -> None:
 
 
 def train(args) -> None:
-    """Train each graph model on the weeks before the live season starts and save it
+    """Train each model on the weeks before the live season starts and save it
     for --models-dir: the same training the backtest gives each past season."""
     city = load(args)
     print(city.summary(), flush=True)
-    models = graph_models(args.models)
+    models = saved_models(args.models)
     if not models:
-        raise SystemExit(f"None of {list(args.models)} is a graph model; nothing to train.")
+        raise SystemExit(f"None of {list(args.models)} has anything to train.")
     origin = city.rates.index.max()
     season, anchor = season_of(city, origin), season_start(city)
     out = Path(args.out or Path(args.root) / "models" / season / args.city)
@@ -294,8 +300,18 @@ def train(args) -> None:
         for saved in fc.meta["saved_models"]:
             shutil.copy2(saved, out / Path(saved).name)
     files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(out.glob("*.pt"))}
+    # Models trained in an earlier call stay listed: train can add models to a folder.
+    before = json.loads((out / "manifest.json").read_text()) if (out / "manifest.json").exists() else {}
+    if before and before.get("anchor") != str(anchor.date()):
+        before = {}
+    trained = {**before.get("trained", {m: before.get("trained_through") for m in
+                                        before.get("models", [])}),
+               **{m: str(origin.date()) for m in models}}
     manifest = {"city": args.city, "season": season, "anchor": str(anchor.date()),
-                "trained_through": str(origin.date()), "models": models,
+                "trained_through": str(origin.date()),
+                "models": [m for m in DEFAULT_MODELS if m in trained] +
+                          sorted(set(trained) - set(DEFAULT_MODELS)),
+                "trained": trained,
                 "package_version": af.__version__, "quick": bool(quick_configs(models)),
                 "files": files, "updated": time.strftime("%Y-%m-%dT%H:%M:%S")}
     # Array tasks finish one horizon each; the last to finish lists them all.
@@ -353,6 +369,78 @@ def assemble(args) -> None:
     print(bt.report(show=False))
 
 
+def explain(args) -> None:
+    """What drove the graph model's forecast at every week since the season start, as
+    drivers.csv (+ drivers.json) beside the newest archived forecast. Weeks explained
+    in an earlier folder with the same saved models are copied from it, so each week
+    only the new origin is computed."""
+    from areafluforecast.drivers import METHOD, explain as explain_frozen
+
+    city = load(args)
+    frozen = check_models_dir(argparse.Namespace(**{**vars(args), "models": ["gnn_st"]}), city)
+    if frozen is None:
+        raise SystemExit("explain needs --models-dir: only saved models can be explained exactly.")
+    origin = city.rates.index.max()
+    season = season_of(city, origin)
+    archive_dir = Path(args.root) / season / args.city
+    folder = archive_dir / str(origin.date())
+    if not (folder / "meta.json").is_file():
+        raise SystemExit(f"{folder} has no forecast yet; run `live_forecast.py run` first.")
+    if not json.loads((folder / "meta.json").read_text()).get("frozen_models"):
+        raise SystemExit(f"{folder} was forecast by retraining, so the weights behind it were not "
+                         "saved and it can't be explained exactly. Forecast with --models-dir.")
+    if (folder / "drivers.csv").exists() and not args.force:
+        raise SystemExit(f"{folder / 'drivers.csv'} exists; pass --force to explain again.")
+    manifest = json.loads((frozen / "manifest.json").read_text())
+    key = {"method": METHOD, "seed": args.seed, "anchor": manifest["anchor"],
+           "files": {f"gnn_st_h{h}.pt": manifest["files"][f"gnn_st_h{h}.pt"] for h in HORIZONS}}
+
+    cached, source = pd.DataFrame(), None
+    for previous in sorted(archive_dir.glob("*/drivers.json"), reverse=True):
+        info = json.loads(previous.read_text())
+        if previous.parent != folder and {k: info.get(k) for k in key} == key:
+            cached = pd.read_csv(previous.parent / "drivers.csv", parse_dates=["origin_date",
+                                                                              "target_date"])
+            cached = cached[cached["origin_date"] < origin]
+            source = previous.parent.name
+            break
+    weeks = city.rates.index[(city.rates.index >= pd.Timestamp(manifest["anchor"])) &
+                             (city.rates.index <= origin)]
+    done = set(cached["origin_date"]) if len(cached) else set()
+    missing = [w for w in weeks if w not in done]
+    print(f"Explaining {len(missing)} origin(s)" +
+          (f"; {len(done)} reused from {source}" if done else ""), flush=True)
+    started = time.perf_counter()
+    new = explain_frozen(city, frozen, origins=missing, horizons=HORIZONS, seed=args.seed,
+                         n_perm={w: 256 if w == origin else 128 for w in missing})
+    seconds = time.perf_counter() - started
+
+    # The published median is the MC-Dropout mean; the gap to the explained
+    # (deterministic) forecast is its own row, so each waterfall ends on it.
+    published = pd.read_csv(folder / "forecast.csv", parse_dates=["origin_date"])
+    published = published[published["model"] == "gnn_st"].set_index(["horizon", "area"])["predicted"]
+    live = new[new["origin_date"] == origin].drop_duplicates(["horizon", "area"])
+    adjust = live.assign(driver="adjust", source_area="", se=0.0,
+                         value=[published[(h, a)] - out for h, a, out in
+                                zip(live["horizon"], live["area"], live["output"])])
+    table = pd.concat([cached, new, adjust], ignore_index=True)
+    rates = city.rates
+    table["actual"] = [rates.at[t, a] if t in rates.index else np.nan
+                       for t, a in zip(table["target_date"], table["area"].astype(str))]
+    table = table.sort_values(["origin_date", "horizon", "area", "driver", "source_area"])
+    table.to_csv(folder / "drivers.csv", index=False, float_format="%.4f",
+                 date_format="%Y-%m-%d")
+    (folder / "drivers.json").write_text(json.dumps({
+        **key, "n_perm": {"live": 256, "earlier": 128}, "origins": len(weeks),
+        "computed": [str(w.date()) for w in missing], "reused_from": source,
+        "seconds": round(seconds, 1), "machine": machine(),
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=2) + "\n")
+    gap = adjust["value"].abs().max()
+    print(f"Explained {len(missing)} origin(s) in {seconds:.0f}s; largest gap to the published "
+          f"median {gap:.3f}", flush=True)
+    print(f"Outputs: {folder / 'drivers.csv'}", flush=True)
+
+
 def score(args) -> None:
     root = Path(args.root)
     truth = af.load_city(args.data or root / args.city, name=args.city, weather=False).rates
@@ -389,7 +477,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     commands = {"run": run, "train": train, "backtest-part": backtest_part,
-                "forecast-part": forecast_part, "assemble": assemble, "score": score}
+                "forecast-part": forecast_part, "assemble": assemble, "explain": explain,
+                "score": score}
     for name in commands:
         p = sub.add_parser(name)
         p.add_argument("--city", required=True)
@@ -401,8 +490,10 @@ def main() -> None:
         p.add_argument("--seasons", nargs="+", type=int,
                        help="trust-check seasons (default: the last 3 complete)")
         p.add_argument("--as-of", help="pretend the data ends this week (sanity checks)")
-        if name in ("run", "assemble"):
+        if name in ("run", "assemble", "explain"):
             p.add_argument("--force", action="store_true")
+        if name == "explain":
+            p.add_argument("--seed", type=int, default=0, help="seed for the sampled orderings")
         if name == "backtest-part":
             p.add_argument("--index", type=int, required=True)
         if name == "forecast-part":
@@ -411,8 +502,8 @@ def main() -> None:
             p.add_argument("--horizon", type=int, choices=HORIZONS,
                            help="train one horizon (one array task); default all four")
             p.add_argument("--out", help="default <root>/models/<season>/<city>")
-        if name in ("run", "forecast-part", "assemble"):
-            p.add_argument("--models-dir", help="load the graph models `train` saved here instead "
+        if name in ("run", "forecast-part", "assemble", "explain"):
+            p.add_argument("--models-dir", help="load the models `train` saved here instead "
                            "of retraining them")
         if name == "run":
             p.add_argument("--jobs", type=int, default=1,

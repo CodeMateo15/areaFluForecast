@@ -18,10 +18,18 @@ from .city import City
 from .climatology import fit_climatology
 from .configs import ArimaConfig, BaselineConfig, ColaGNNConfig, GNNConfig, LSTMConfig, ModelConfig, to_json
 from .errors import DataError, DataWarning
-from .graphs import GraphSpec, build_graph
+from .graphs import Graph, GraphSpec, build_graph
 from .intervals import QUANTILE_COLUMNS, attach_intervals, fit_intervals
 from .models import ColaGNN, MultivariateLSTM, SpatioTemporalGNN, blend_init
-from .samples import FeatureSpec, build_dataset, build_samples, impute_causal, sequence_arrays
+from .samples import (
+    FeatureSpec,
+    Normalization,
+    Samples,
+    build_dataset,
+    build_samples,
+    impute_causal,
+    sequence_arrays,
+)
 from .training import (
     assert_mc_dropout_valid,
     calibrate_intervals,
@@ -77,14 +85,15 @@ def make_split(index: pd.DatetimeIndex, window: Window, *, only_origin: int | No
 def run_model(city: City, config: ModelConfig, *, horizon: int, test_start, test_end,
               rates: pd.DataFrame | None = None, only_origin: int | None = None,
               init_members: list[dict] | None = None, zero_shot: bool = False,
-              init_features: list[str] | None = None,
+              init_features: list[str] | None = None, arima_orders: dict | None = None,
               on_unit: UnitCallback = None, device: str | None = None) -> FitOutput:
     """Train `config` to forecast `horizon` weeks ahead and score [test_start, test_end].
 
     `rates` overrides the city's rates (forecasting passes them extended with
     empty future weeks). `only_origin` keeps a single scored origin.
     `init_members` are saved weights to start from; `init_features` the input
-    feature names they were trained on, checked against this city's. `device`
+    feature names they were trained on, checked against this city's.
+    `arima_orders` ({area: "(p, d, q)"}) skips ARIMA's order search. `device`
     defaults to the CPU. The caller's random generators and torch thread count
     are restored afterwards.
     """
@@ -97,11 +106,12 @@ def run_model(city: City, config: ModelConfig, *, horizon: int, test_start, test
             out = _run_gnn(city, config, rates, window, split, torch_device, init_members,
                            zero_shot, init_features, on_unit)
         elif isinstance(config, (LSTMConfig, ColaGNNConfig)):
-            out = _run_sequence(city, config, rates, window, split, torch_device, on_unit)
+            out = _run_sequence(city, config, rates, window, split, torch_device, on_unit,
+                                init_members, zero_shot)
         elif isinstance(config, BaselineConfig):
             out = _run_baseline(city, config, rates, window, split, on_unit)
         elif isinstance(config, ArimaConfig):
-            out = _run_arima(city, config, rates, window, split, on_unit)
+            out = _run_arima(city, config, rates, window, split, on_unit, arima_orders)
         else:
             raise TypeError(f"Unknown config {type(config).__name__}")
     out.meta.update({"horizon": int(horizon), "window": window.to_json(),
@@ -148,8 +158,21 @@ def gnn_graph_spec(config: GNNConfig) -> GraphSpec:
 
 # --- graph model ---------------------------------------------------------------
 
-def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members, zero_shot,
-             init_features, on_unit) -> FitOutput:
+@dataclass
+class GNNInputs:
+    """Everything the graph model sees for one window and split, and a builder for
+    an untrained model of the right shape."""
+
+    samples: Samples
+    norm: Normalization
+    graph: Graph
+    relations: list[tuple]
+    build: Callable[[], SpatioTemporalGNN]
+
+
+def gnn_inputs(city, config: GNNConfig, rates, window, split, device) -> GNNInputs:
+    """The graph model's tensors, scaling and graph, as `_run_gnn` trains and forecasts
+    with them; `explain` reuses this so its inputs can't drift from the forecast's."""
     features = _features(city, config)
     dataset = build_dataset(city, features, rates)
     history = dataset.rates.loc[dataset.rates.index < window.test_start]
@@ -160,9 +183,29 @@ def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members
     graph = build_graph(gnn_graph_spec(config), city=city, flu_history=history,
                         static=static_for_graph)
     samples, norm = build_samples(dataset, split, features, window, graph, target="blend")
+    relations = graph.relation_tensors()
+
+    def build() -> SpatioTemporalGNN:
+        return SpatioTemporalGNN(
+            lookback=samples.lookback, temporal_channels=samples.temporal_channels,
+            n_static_feat=samples.n_static_feat, n_global=samples.n_global,
+            n_nodes=graph.n_nodes, n_horizons=len(window.horizons),
+            relation_names=[name for name, _, _ in relations], hidden=config.channels,
+            dropout=config.dropout, dilations=config.dilations,
+            adaptive_dim=config.adaptive_dim if config.adaptive else 0,
+            dropedge=config.drop_edge, blend_init=blend_init(window.horizons),
+            n_blocks=config.n_blocks).to(device)
+
+    return GNNInputs(samples=samples, norm=norm, graph=graph, relations=relations, build=build)
+
+
+def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members, zero_shot,
+             init_features, on_unit) -> FitOutput:
+    inputs = gnn_inputs(city, config, rates, window, split, device)
+    samples, norm, graph, relations, build = (inputs.samples, inputs.norm, inputs.graph,
+                                              inputs.relations, inputs.build)
     train_set, val_set = samples.subset(split.train), samples.subset(split.val)
     test_set = samples.subset(split.test)
-    relations = graph.relation_tensors()
     if init_members and init_features is not None and list(init_features) != samples.feature_names:
         theirs, ours = list(init_features), samples.feature_names
         detail = (f"only in the saved model: {sorted(set(theirs) - set(ours))}; only here: "
@@ -176,17 +219,6 @@ def _run_gnn(city, config: GNNConfig, rates, window, split, device, init_members
             raise DataError(message)
         warnings.warn(message + " Inputs that differ start from untrained weights.", DataWarning,
                       stacklevel=4)
-
-    def build() -> SpatioTemporalGNN:
-        return SpatioTemporalGNN(
-            lookback=samples.lookback, temporal_channels=samples.temporal_channels,
-            n_static_feat=samples.n_static_feat, n_global=samples.n_global,
-            n_nodes=graph.n_nodes, n_horizons=len(window.horizons),
-            relation_names=[name for name, _, _ in relations], hidden=config.channels,
-            dropout=config.dropout, dilations=config.dilations,
-            adaptive_dim=config.adaptive_dim if config.adaptive else 0,
-            dropedge=config.drop_edge, blend_init=blend_init(window.horizons),
-            n_blocks=config.n_blocks).to(device)
 
     seeds = [config.seed + i for i in range(max(1, config.n_seeds))]
     per_member = max(1, config.mc_samples // len(seeds))
@@ -279,7 +311,10 @@ def _first_model_blend(members, build) -> list[float] | None:
 
 # --- LSTM and Cola-GNN -----------------------------------------------------------
 
-def _run_sequence(city, config, rates, window, split, device, on_unit) -> FitOutput:
+def _run_sequence(city, config, rates, window, split, device, on_unit, init_members=None,
+                  zero_shot=False) -> FitOutput:
+    """LSTM or Cola-GNN: train each seed (from `init_members` when given; zero_shot
+    loads them without training) and average the seeds' forecasts."""
     features, _ = impute_causal(rates)
     mean, std = normalization(rates, split)
     is_lstm = isinstance(config, LSTMConfig)
@@ -296,7 +331,7 @@ def _run_sequence(city, config, rates, window, split, device, on_unit) -> FitOut
 
     seeds = [config.seed + i for i in range(max(1, config.n_seeds))]
     test_draws, val_draws, members, results = [], [], [], []
-    for seed in seeds:
+    for member, seed in enumerate(seeds):
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -309,8 +344,11 @@ def _run_sequence(city, config, rates, window, split, device, on_unit) -> FitOut
             model = ColaGNN(city.n_areas, window.lookback, len(window.horizons), adjacency,
                             hidden=config.hidden, conv_channels=config.conv_channels,
                             gnn_hidden=config.hidden, dropout=config.dropout).to(device)
-        results.append(train_sequence_model(model, train, val, config=config, device=device,
-                                            seed=seed, use_clim=is_lstm))
+        if init_members:
+            model.load_state_dict(init_members[member % len(init_members)])
+        if not (init_members and zero_shot):
+            results.append(train_sequence_model(model, train, val, config=config, device=device,
+                                                seed=seed, use_clim=is_lstm))
         model.eval()
         with torch.no_grad():
             def predict(x, c, model=model):
@@ -398,14 +436,16 @@ def _baseline_value(series: np.ndarray, origin: int, horizon: int, kind: str, me
 
 # --- seasonal ARIMA ----------------------------------------------------------------
 
-def _run_arima(city, config: ArimaConfig, rates, window, split, on_unit) -> FitOutput:
+def _run_arima(city, config: ArimaConfig, rates, window, split, on_unit,
+               fixed_orders: dict | None = None) -> FitOutput:
     """One seasonal ARIMA per area, as the research `run_arima.py`.
 
     The order is searched on the validation origins (fit through the last
     training origin, then rolled forward), validation forecasts with that order
     size the ranges, and the scored origins are forecast from a fit through the
     first scored origin rolled forward. If more than a few forecasts fell back
-    to "same as last week", a DataWarning says so.
+    to "same as last week", a DataWarning says so. `fixed_orders` (saved from an
+    earlier fit on the same training weeks) skips the search.
     """
     from .arima import select_order, walk_forward_forecasts
 
@@ -420,9 +460,12 @@ def _run_arima(city, config: ArimaConfig, rates, window, split, on_unit) -> FitO
     orders, fallbacks = {}, 0
     for node, area in enumerate(city.areas):
         series = rates[area]
-        order = select_order(series, train_last, val_dates, horizon, steps,
-                             harmonics=config.harmonics, max_p=config.max_p,
-                             max_d=config.max_d, max_q=config.max_q)
+        if fixed_orders is not None:
+            order = tuple(int(v) for v in fixed_orders[area].strip("()").split(","))
+        else:
+            order = select_order(series, train_last, val_dates, horizon, steps,
+                                 harmonics=config.harmonics, max_p=config.max_p,
+                                 max_d=config.max_d, max_q=config.max_q)
         orders[area] = str(order)
         val_fc, _ = walk_forward_forecasts(series, order, val_dates, steps, config.harmonics,
                                            initial_end=train_last)
