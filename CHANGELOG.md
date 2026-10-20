@@ -7,6 +7,25 @@ All notable changes to areaFluForecast are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `explain(city, models_dir)` splits a frozen graph model's forecast, per area,
+  horizon and week, into what moved it away from a usual week at that time of
+  year: this week's reading, the three weeks before, earlier weeks, weather, the
+  seasonal curve, and each other area (what spills over through the graph).
+  Values are Owen values in rate units that add up exactly to the forecast,
+  with their sampling error; each area takes about a second.
+- `scripts/live_forecast.py explain --models-dir` writes `drivers.csv` beside
+  the newest archived forecast, reusing the weeks an earlier folder already
+  explained with the same models, plus the gap to the published (MC-Dropout)
+  median as its own row.
+
+### Changed
+- `forecast(save_models=True)` and `forecast(frozen=)` now cover LSTM, Cola-GNN
+  and ARIMA as well as the graph models: the sequence models load their saved
+  weights, and ARIMA keeps its saved orders (no order search) and refits on the
+  new weeks. `live_forecast.py train` can add models to a folder that already
+  holds others, so a weekly run with `--models-dir` trains nothing.
+
 ## [1.2.0] - 2026-10-18
 
 ### Added

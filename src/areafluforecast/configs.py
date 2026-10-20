@@ -180,6 +180,12 @@ def is_learned(config: ModelConfig) -> bool:
     return not isinstance(config, (BaselineConfig, ArimaConfig))
 
 
+def is_freezable(config: ModelConfig) -> bool:
+    """Whether `forecast(save_models=True)` saves it and `frozen=` loads it: every
+    model with something fitted (weights, or ARIMA's chosen orders), not the baselines."""
+    return not isinstance(config, BaselineConfig)
+
+
 def to_json(config: ModelConfig) -> dict:
     payload = asdict(config)
     for key, value in payload.items():
