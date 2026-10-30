@@ -18,6 +18,17 @@ All notable changes to areaFluForecast are listed here. The format follows
   the newest archived forecast, reusing the weeks an earlier folder already
   explained with the same models, plus the gap to the published (MC-Dropout)
   median as its own row.
+- `ensemble.average()` combines the four models into "avg", averaging each
+  predictive quantile across them (as the CDC forecast hubs combine teams). It
+  needs no training and is scored like any other model.
+  `ensemble.backtest_with_average()` rescores a backtest with it, so it gets a
+  verdict against persistence.
+- The live track adds "avg" to every archive and its backtest the four models
+  are all in. `scripts/add_ensemble.py` appends it to forecasts archived before
+  it existed (rows are only added; each folder gets an `ensemble.json`).
+- `scripts/stacking_experiment.py` tests whether weighting the models beats
+  averaging them: linear stacking and feature-weighted linear stacking (Sill et
+  al. 2009), scored by nested leave-one-season-out on the trust-check backtest.
 
 ### Changed
 - `forecast(save_models=True)` and `forecast(frozen=)` now cover LSTM, Cola-GNN
