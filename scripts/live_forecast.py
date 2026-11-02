@@ -37,7 +37,9 @@ Layout under --root (default live/):
 
 This track is separate from the paper's backtest: its forecasts are written once and
 never re-run, so the scores are a true prospective record. Persistence is forecast
-alongside the models so each week has its "same as last week" reference.
+alongside the models so each week has its "same as last week" reference, and "avg"
+(the four models' quantiles averaged, areafluforecast.ensemble) is added to every
+archive and backtest the four models are all in.
 """
 
 from __future__ import annotations
@@ -63,6 +65,7 @@ import areafluforecast as af
 from areafluforecast.backtest import BacktestResult, combine
 from areafluforecast.configs import DEFAULT_MODELS, is_freezable
 from areafluforecast.engine import make_split, make_window
+from areafluforecast.ensemble import ENSEMBLE, backtest_with_average, with_average
 from areafluforecast.forecast import _trust
 from areafluforecast.scoring import add_cell_scores
 
@@ -219,7 +222,11 @@ def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick:
                          "pass --force only to replace a broken run.")
     ref = af.forecast(city, ("persistence",), horizons=HORIZONS, backtest=None, out_dir=None,
                       progress=False)
-    trust, notes = _trust(bt, list(args.models), HORIZONS)
+    # The average of the four models, when all four ran; scored in the backtest the same way.
+    table = with_average(table)
+    bt = backtest_with_average(bt)
+    models = [*args.models, *([ENSEMBLE] if ENSEMBLE in set(table["model"]) else [])]
+    trust, notes = _trust(bt, models, HORIZONS)
     table = pd.concat([table.drop(columns=["trust"], errors="ignore").merge(
                            trust, on=["model", "horizon"], how="left"),
                        ref.table.assign(trust="reference")], ignore_index=True)
@@ -237,6 +244,8 @@ def archive(args, city: af.City, table: pd.DataFrame, bt: BacktestResult, quick:
     (folder / "meta.json").write_text(json.dumps({
         "city": args.city, "label": city.label, "season": season,
         "origin": str(origin.date()), "horizons": list(HORIZONS), "models": list(args.models),
+        "ensemble": ({"name": ENSEMBLE, "members": list(DEFAULT_MODELS), "method": "quantile mean"}
+                     if ENSEMBLE in models else None),
         "backtest": str(bt.path), "backtest_seasons": bt.meta.get("season_labels"),
         "training": training_window(city, anchor=season_start(city) if frozen else None),
         "frozen_models": (json.loads((frozen / "manifest.json").read_text())
