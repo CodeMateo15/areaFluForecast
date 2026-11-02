@@ -7,6 +7,8 @@ All notable changes to areaFluForecast are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-02
+
 ### Added
 - `explain(city, models_dir)` splits a frozen graph model's forecast, per area,
   horizon and week, into what moved it away from a usual week at that time of
