@@ -190,10 +190,10 @@ def choose(simplex, meta, point, quant, y, season, train, greedy: bool):
         trials = [(*best_lam(chosen + [c]), c) for c in CANDIDATES if c not in chosen]
         if not trials:
             break
-        s, l, c = min(trials)
-        if s >= score:
+        trial_score, trial_lam, feature = min(trials)
+        if trial_score >= score:
             break
-        chosen, score, lam = chosen + [c], s, l
+        chosen, score, lam = chosen + [feature], trial_score, trial_lam
     return chosen, lam
 
 
