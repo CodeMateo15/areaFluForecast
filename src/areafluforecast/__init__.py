@@ -38,7 +38,7 @@ from .drivers import explain
 from .errors import DataError, DataWarning, TrustWarning
 from .forecast import ForecastResult, forecast
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = ["City", "load_sample", "load_city", "save_city", "rates_from_counts", "read_rates_csv",
            "backtest", "BacktestResult", "latest_backtest", "combine",
